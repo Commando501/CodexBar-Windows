@@ -33,8 +33,22 @@ if (-not (Test-Path $cliExe)) { throw "Expected release CLI not found: $cliExe" 
 Write-Host "==> 2/4  Publishing .NET tray (self-contained, win-x64)..." -ForegroundColor Cyan
 $publishDir = Join-Path $repo "WindowsTray\bin\Release\net8.0-windows\win-x64\publish"
 if (Test-Path $publishDir) { Remove-Item -Recurse -Force $publishDir }
+
+# Stamp the tray with the marketing version from version.env so the in-app
+# update checker can compare itself against GitHub releases.
+$versionArgs = @()
+$versionEnv = Join-Path $repo "version.env"
+if (Test-Path $versionEnv) {
+    $match = Get-Content $versionEnv | Select-String '^MARKETING_VERSION=(.+)$'
+    $marketing = $match.Matches.Groups[1].Value
+    if ($marketing) {
+        Write-Host "    version $marketing (from version.env)"
+        $versionArgs = @("-p:Version=$marketing")
+    }
+}
+
 & dotnet publish (Join-Path $repo "WindowsTray\CodexBarTray.csproj") `
-    -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false
+    -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false @versionArgs
 if ($LASTEXITCODE -ne 0) { throw ".NET publish failed." }
 if (-not (Test-Path $publishDir)) { throw "Expected publish dir not found: $publishDir" }
 

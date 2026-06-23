@@ -19,9 +19,14 @@ public sealed class ProviderSettingRow : INotifyPropertyChanged
 
     public bool ShowKeyField => AuthKind == AuthKind.ApiKey;
 
+    // Cookie-based providers we can import browser cookies for on Windows.
+    public bool ShowCookieImport =>
+        AuthKind == AuthKind.CookieOrOther && ProviderCookieDomains.IsCookieProvider(Id);
+
     public string AuthLabel => AuthKind switch
     {
         AuthKind.OAuthOrCli => "OAuth / CLI",
+        AuthKind.CookieOrOther when ProviderCookieDomains.IsCookieProvider(Id) => "cookie — import from browser",
         AuthKind.CookieOrOther => "cookie / other — limited on Windows",
         _ => "",
     };

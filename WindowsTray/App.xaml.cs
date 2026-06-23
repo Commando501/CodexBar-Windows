@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -11,13 +12,22 @@ public partial class App : Application
     private ServeProcess? _serve;
     private UsageClient? _client;
     private DispatcherTimer? _refreshTimer;
+    private DispatcherTimer? _updateTimer;
     private MenuItem? _statusItem;
+    private MenuItem? _updateItem;
+
+    private readonly UpdateChecker _updateChecker = new();
+    private UpdateInfo? _pendingUpdate;
 
     private readonly UsageViewModel _usageVm = new();
     private readonly ConfigService _config = new();
     private readonly UiSettings _ui = UiSettings.Load();
+    private readonly QuotaNotificationCoordinator _notifications = new();
+    private readonly WidgetManager _widgets = new(WidgetStore.Load());
+    private readonly UsageHistoryStore _history = UsageHistoryStore.Load();
     private SettingsWindow? _settingsWindow;
     private UsageWindow? _usageWindow;
+    private List<ProviderViewModel> _latestTiles = new();
     private bool _refreshing;
 
     private void OnStartup(object sender, StartupEventArgs e)
@@ -43,7 +53,74 @@ public partial class App : Application
         // Restore a pinned panel so it's there as soon as the app launches.
         if (_ui.AlwaysOnScreen) _usageWindow.ShowPanel();
 
+        // Restore any pinned desktop widgets; they show "waiting for data" until
+        // the first refresh, then update alongside the panel.
+        _widgets.RefreshRequested += () => _ = RefreshUsageAsync();
+        _widgets.RestoreSaved();
+
         _ = StartEngineAsync();
+        StartUpdateChecks();
+    }
+
+    private void StartUpdateChecks()
+    {
+        // Daily automatic checks plus one shortly after launch.
+        _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(24) };
+        _updateTimer.Tick += (_, _) => _ = CheckForUpdatesAsync(manual: false);
+        _updateTimer.Start();
+        _ = CheckForUpdatesAsync(manual: false);
+    }
+
+    private async Task CheckForUpdatesAsync(bool manual)
+    {
+        if (!manual && !_ui.AutomaticUpdateChecks) return;
+
+        UpdateInfo? info;
+        try
+        {
+            info = await _updateChecker.CheckAsync(AppVersion.Current);
+        }
+        catch (Exception ex)
+        {
+            if (manual) Dispatcher.Invoke(() => ShowBalloon("Update check failed", ex.Message, BalloonIcon.Warning));
+            return;
+        }
+
+        Dispatcher.Invoke(() =>
+        {
+            if (info is not null)
+            {
+                _pendingUpdate = info;
+                if (_updateItem is not null)
+                {
+                    _updateItem.Header = $"Download update (v{info.Version.ToString(3)})…";
+                    _updateItem.Visibility = Visibility.Visible;
+                }
+                // Toast once per release for automatic checks; always for manual.
+                if (manual || _ui.LastNotifiedUpdateTag != info.TagName)
+                {
+                    ShowBalloon(
+                        "Update available",
+                        $"CodexBar {info.Version.ToString(3)} is available — open the tray menu to download.",
+                        BalloonIcon.Info);
+                    _ui.LastNotifiedUpdateTag = info.TagName;
+                    _ui.Save();
+                }
+            }
+            else if (manual)
+            {
+                ShowBalloon("CodexBar is up to date", $"You're on the latest version (v{AppVersion.DisplayString}).", BalloonIcon.Info);
+            }
+        });
+    }
+
+    private void ShowBalloon(string title, string message, BalloonIcon icon) =>
+        _trayIcon?.ShowBalloonTip(title, message, icon);
+
+    private static void OpenUrl(string url)
+    {
+        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+        catch { /* nothing actionable if the shell can't open the browser */ }
     }
 
     private ContextMenu BuildContextMenu()
@@ -52,6 +129,12 @@ public partial class App : Application
 
         _statusItem = new MenuItem { Header = "Starting…", IsEnabled = false };
         menu.Items.Add(_statusItem);
+
+        // Hidden until an update is found; opens the release page when shown.
+        _updateItem = new MenuItem { Header = "Download update…", Visibility = Visibility.Collapsed };
+        _updateItem.Click += (_, _) => { if (_pendingUpdate is { } u) OpenUrl(u.ReleaseUrl); };
+        menu.Items.Add(_updateItem);
+
         menu.Items.Add(new Separator());
 
         var refresh = new MenuItem { Header = "Refresh" };
@@ -61,6 +144,16 @@ public partial class App : Application
         var settings = new MenuItem { Header = "Settings…" };
         settings.Click += (_, _) => OpenSettings();
         menu.Items.Add(settings);
+
+        var checkUpdates = new MenuItem { Header = "Check for updates…" };
+        checkUpdates.Click += (_, _) => _ = CheckForUpdatesAsync(manual: true);
+        menu.Items.Add(checkUpdates);
+
+        var widgets = new MenuItem { Header = "Widgets" };
+        // Rebuild the provider list each time so it reflects the latest refresh.
+        widgets.SubmenuOpened += (_, _) => PopulateWidgetsMenu(widgets);
+        widgets.Items.Add(new MenuItem { Header = "Loading…", IsEnabled = false });
+        menu.Items.Add(widgets);
 
         var alwaysOnScreen = new MenuItem
         {
@@ -98,6 +191,69 @@ public partial class App : Application
         menu.Items.Add(quit);
 
         return menu;
+    }
+
+    // Cost data is only available for Claude and Codex (local token-cost files).
+    private static readonly HashSet<string> CostProviderIds =
+        new(StringComparer.OrdinalIgnoreCase) { "claude", "codex" };
+
+    private void PopulateWidgetsMenu(MenuItem root)
+    {
+        root.Items.Clear();
+
+        root.Items.Add(BuildAddSubmenu("Usage", WidgetKind.Usage, _ => true));
+        root.Items.Add(BuildAddSubmenu("Cost", WidgetKind.Cost, CostProviderIds.Contains));
+        root.Items.Add(BuildAddSubmenu("Cost history", WidgetKind.CostHistory, CostProviderIds.Contains));
+        root.Items.Add(BuildWindowGroupedSubmenu("Burn-down", WidgetKind.BurnDown, _ => true));
+        root.Items.Add(BuildWindowGroupedSubmenu("Usage history", WidgetKind.UsageHistory, _ => true));
+
+        root.Items.Add(new Separator());
+        var removeAll = new MenuItem { Header = "Remove all widgets", IsEnabled = _widgets.Count > 0 };
+        removeAll.Click += (_, _) => _widgets.RemoveAll();
+        root.Items.Add(removeAll);
+    }
+
+    // A parent menu with Session / Weekly sub-submenus, each listing providers.
+    private MenuItem BuildWindowGroupedSubmenu(string header, WidgetKind kind, Func<string, bool> providerFilter)
+    {
+        var menu = new MenuItem { Header = header };
+        menu.Items.Add(BuildAddSubmenu("Session", kind, providerFilter, QuotaWindowKind.Session));
+        menu.Items.Add(BuildAddSubmenu("Weekly", kind, providerFilter, QuotaWindowKind.Weekly));
+        return menu;
+    }
+
+    private MenuItem BuildAddSubmenu(
+        string header,
+        WidgetKind kind,
+        Func<string, bool> providerFilter,
+        QuotaWindowKind window = QuotaWindowKind.Session)
+    {
+        var menu = new MenuItem { Header = header };
+        var providers = _latestTiles
+            .Where(t => !string.IsNullOrEmpty(t.Id) && providerFilter(t.Id))
+            .ToList();
+
+        if (providers.Count == 0)
+        {
+            menu.Items.Add(new MenuItem { Header = "No providers yet", IsEnabled = false });
+            return menu;
+        }
+
+        foreach (var tile in providers)
+        {
+            var id = tile.Id;
+            var item = new MenuItem { Header = tile.Name };
+            item.Click += (_, _) => AddWidgetAndRefresh(id, kind, window);
+            menu.Items.Add(item);
+        }
+        return menu;
+    }
+
+    private void AddWidgetAndRefresh(string providerId, WidgetKind kind, QuotaWindowKind window)
+    {
+        _widgets.AddWidget(providerId, kind, window);
+        // Refresh promptly so the new widget (especially cost) populates without waiting.
+        _ = RefreshUsageAsync();
     }
 
     private async Task StartEngineAsync()
@@ -148,11 +304,30 @@ public partial class App : Application
                 .Select(w => w.UsedPercent)
                 .DefaultIfEmpty(0)
                 .Max();
+            var prefs = new NotificationPrefs(
+                _ui.SessionQuotaNotificationsEnabled,
+                _ui.QuotaWarningNotificationsEnabled,
+                _ui.QuotaWarningThresholds);
+            var notifications = _notifications.Evaluate(results, prefs);
+
+            // Only pay for /cost when a cost widget is actually pinned. The widget
+            // list lives on the UI thread, so read the flag there.
+            var costs = new List<CostResult>();
+            if (Dispatcher.Invoke(() => _widgets.NeedsCost))
+            {
+                try { costs = CostJson.Parse(await _client.GetCostJsonAsync()); }
+                catch { /* cost is best-effort; leave empty on failure */ }
+            }
             Dispatcher.Invoke(() =>
             {
                 _usageVm.Replace(tiles);
                 _usageVm.Status = $"Updated {DateTime.Now:HH:mm}";
                 UpdateTrayIcon(maxPercent / 100.0, connected: true);
+                foreach (var notification in notifications) ShowNotification(notification);
+                _latestTiles = tiles;
+                // Sample utilization history before handing data to the widgets.
+                _history.Record(results, DateTimeOffset.Now);
+                _widgets.UpdateData(new WidgetData(tiles, results, costs, _history));
             });
             SetTooltip(tiles.Count == 0
                 ? "CodexBar — no providers enabled"
@@ -190,9 +365,19 @@ public partial class App : Application
             _settingsWindow.Activate();
             return;
         }
-        _settingsWindow = new SettingsWindow(_config, onChanged: () => _ = RefreshUsageAsync());
+        _settingsWindow = new SettingsWindow(_config, _ui, onChanged: () => _ = RefreshUsageAsync());
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
+    }
+
+    private void ShowNotification(NotificationItem item)
+    {
+        // Shell balloon notifications (routed through the Action Center on Win 10/11);
+        // no app packaging or extra dependency required.
+        _trayIcon?.ShowBalloonTip(
+            item.Title,
+            item.Body,
+            item.IsWarning ? BalloonIcon.Warning : BalloonIcon.Info);
     }
 
     private void UpdateTrayIcon(double fraction, bool connected)
@@ -217,6 +402,9 @@ public partial class App : Application
     private void OnExit(object sender, ExitEventArgs e)
     {
         _refreshTimer?.Stop();
+        _updateTimer?.Stop();
+        _updateChecker.Dispose();
+        _widgets.CloseAll();
         _usageWindow?.Close();
         _client?.Dispose();
         _serve?.Dispose();

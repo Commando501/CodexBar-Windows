@@ -9,6 +9,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>CodexBarTray</AssemblyName>
     <RootNamespace>CodexBarTray</RootNamespace>
+    <!-- Keep in sync with version.env (MARKETING_VERSION). win-package.ps1 overrides
+         this with -p:Version at package time. -->
+    <Version>0.37.3</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- Single-instance, no console window. -->
     <UseWindowsForms>false</UseWindowsForms>
@@ -16,6 +19,9 @@
 
   <ItemGroup>
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
+    <!-- Browser-cookie import: read browser Cookies SQLite DBs and DPAPI-decrypt. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
 </Project>
