@@ -29,6 +29,7 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
 public sealed class ProviderViewModel
 {
+    public string Id { get; init; } = "";
     public string Name { get; init; } = "";
     public string? Account { get; init; }
     public bool HasError { get; init; }
@@ -85,6 +86,7 @@ public static class UsageViewModelBuilder
             var account = result.Usage?.Identity?.AccountEmail ?? result.Account;
             yield return new ProviderViewModel
             {
+                Id = result.Provider,
                 Name = DisplayName(result.Provider),
                 Account = account,
                 HasError = result.Error is not null,

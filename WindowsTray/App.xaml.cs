@@ -17,8 +17,10 @@ public partial class App : Application
     private readonly ConfigService _config = new();
     private readonly UiSettings _ui = UiSettings.Load();
     private readonly QuotaNotificationCoordinator _notifications = new();
+    private readonly WidgetManager _widgets = new(WidgetStore.Load());
     private SettingsWindow? _settingsWindow;
     private UsageWindow? _usageWindow;
+    private List<ProviderViewModel> _latestTiles = new();
     private bool _refreshing;
 
     private void OnStartup(object sender, StartupEventArgs e)
@@ -44,6 +46,11 @@ public partial class App : Application
         // Restore a pinned panel so it's there as soon as the app launches.
         if (_ui.AlwaysOnScreen) _usageWindow.ShowPanel();
 
+        // Restore any pinned desktop widgets; they show "waiting for data" until
+        // the first refresh, then update alongside the panel.
+        _widgets.RefreshRequested += () => _ = RefreshUsageAsync();
+        _widgets.RestoreSaved();
+
         _ = StartEngineAsync();
     }
 
@@ -62,6 +69,12 @@ public partial class App : Application
         var settings = new MenuItem { Header = "Settings…" };
         settings.Click += (_, _) => OpenSettings();
         menu.Items.Add(settings);
+
+        var widgets = new MenuItem { Header = "Widgets" };
+        // Rebuild the provider list each time so it reflects the latest refresh.
+        widgets.SubmenuOpened += (_, _) => PopulateWidgetsMenu(widgets);
+        widgets.Items.Add(new MenuItem { Header = "Loading…", IsEnabled = false });
+        menu.Items.Add(widgets);
 
         var alwaysOnScreen = new MenuItem
         {
@@ -99,6 +112,34 @@ public partial class App : Application
         menu.Items.Add(quit);
 
         return menu;
+    }
+
+    private void PopulateWidgetsMenu(MenuItem root)
+    {
+        root.Items.Clear();
+
+        var add = new MenuItem { Header = "Add usage widget" };
+        if (_latestTiles.Count == 0)
+        {
+            add.Items.Add(new MenuItem { Header = "No providers yet", IsEnabled = false });
+        }
+        else
+        {
+            foreach (var tile in _latestTiles)
+            {
+                var id = tile.Id;
+                if (string.IsNullOrEmpty(id)) continue;
+                var item = new MenuItem { Header = tile.Name };
+                item.Click += (_, _) => _widgets.AddWidget(id);
+                add.Items.Add(item);
+            }
+        }
+        root.Items.Add(add);
+
+        root.Items.Add(new Separator());
+        var removeAll = new MenuItem { Header = "Remove all widgets", IsEnabled = _widgets.Count > 0 };
+        removeAll.Click += (_, _) => _widgets.RemoveAll();
+        root.Items.Add(removeAll);
     }
 
     private async Task StartEngineAsync()
@@ -160,6 +201,8 @@ public partial class App : Application
                 _usageVm.Status = $"Updated {DateTime.Now:HH:mm}";
                 UpdateTrayIcon(maxPercent / 100.0, connected: true);
                 foreach (var notification in notifications) ShowNotification(notification);
+                _latestTiles = tiles;
+                _widgets.UpdateData(tiles);
             });
             SetTooltip(tiles.Count == 0
                 ? "CodexBar — no providers enabled"
@@ -234,6 +277,7 @@ public partial class App : Application
     private void OnExit(object sender, ExitEventArgs e)
     {
         _refreshTimer?.Stop();
+        _widgets.CloseAll();
         _usageWindow?.Close();
         _client?.Dispose();
         _serve?.Dispose();

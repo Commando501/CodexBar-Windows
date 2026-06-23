@@ -34,7 +34,7 @@ From `Package.swift`, these targets/dependencies build only on macOS:
 | Feature | Source | Windows status |
 |---|---|---|
 | Native menu-bar UI (rich menu + cards) | `CodexBar` target | Replaced by minimal WPF tray (see §4) |
-| Home-screen / Notification-Center widgets | `CodexBarWidget` + `WidgetExtension/` | Missing entirely |
+| WidgetKit widgets (Usage/History/Metric/Burn-Down) | `CodexBarWidget` + `WidgetExtension/` | Partial — pinnable **desktop widget windows** in the tray (`WindowsTray/Widgets/`); no OS Widgets-Board host, History/Burn-Down charts, or Metric/cost widgets yet |
 | Claude usage watchdog helper | `CodexBarClaudeWatchdog` | Missing |
 | Claude web probe helper | `CodexBarClaudeWebProbe` | Missing |
 | Auto-update | `Sparkle` + `appcast.xml` | No updater in the tray |
