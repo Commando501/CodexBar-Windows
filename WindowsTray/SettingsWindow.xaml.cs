@@ -104,6 +104,30 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private async void OnImportCookiesClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: ProviderSettingRow row }) return;
+
+        row.Status = "Importing cookies…";
+        try
+        {
+            var result = await Task.Run(() => BrowserCookieImporter.ImportForProvider(row.Id));
+            if (!result.Found || result.Header is null)
+            {
+                row.Status = result.Detail;
+                return;
+            }
+            await _config.SetCookieAsync(row.Id, result.Header);
+            row.Enabled = true; // set-cookie auto-enables
+            row.Status = $"{result.Detail} Provider enabled.";
+            _onChanged();
+        }
+        catch (Exception ex)
+        {
+            row.Status = $"failed: {ex.Message}";
+        }
+    }
+
     private async void OnSaveKeyClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { DataContext: ProviderSettingRow row } button) return;

@@ -53,6 +53,12 @@ public sealed class ConfigService
     public Task SetApiKeyAsync(string id, string key) =>
         RunAsync(new[] { "config", "set-api-key", "--provider", id, "--stdin" }, stdin: key);
 
+    public Task SetCookieAsync(string id, string cookieHeader) =>
+        RunAsync(new[] { "config", "set-cookie", "--provider", id, "--stdin" }, stdin: cookieHeader);
+
+    public Task ClearCookieAsync(string id) =>
+        RunAsync(new[] { "config", "clear-cookie", "--provider", id });
+
     private async Task<string> RunAsync(string[] args, string? stdin = null)
     {
         if (!File.Exists(_exePath))

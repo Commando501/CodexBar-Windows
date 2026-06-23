@@ -46,10 +46,13 @@ From `Package.swift`, these targets/dependencies build only on macOS:
 These live in `CodexBarCore` but are `#if os(macOS)`-only or stubbed, so even the
 headless engine loses them on Windows:
 
-- **Browser cookie import (`SweetCookieKit`)** — the entire cookie-extraction
-  stack is macOS-only (returns `nil`/`false` on Windows); 37 files depend on it.
-  This is the single largest gap. The Windows Settings window already states:
-  *"cookie-based providers aren't fully supported on Windows yet."*
+- **Browser cookie import (`SweetCookieKit`)** — the engine's auto-import stack is
+  macOS-only. ✅ *Windows path implemented*: the tray extracts cookies itself
+  (`WindowsTray/Cookies/` — Chromium DPAPI+AES-GCM and Firefox) and feeds them to
+  the engine via the new `codexbar config set-cookie` verb (`cookieSource=manual`).
+  *"Import browser cookies"* appears per cookie-provider in Settings. Caveat:
+  Chrome 127+ app-bound (`v20`) cookies can't be decrypted without elevation —
+  Edge/Brave/Firefox/older-Chrome work. No automatic re-import on expiry yet.
 - **macOS Keychain** — `KeychainAccessGate`, `KeychainCacheStore`,
   `KeychainMigration`, `KeychainPromptCoordinator`, `KeychainNoUIQuery`, and the
   `security` CLI reader for Claude OAuth. On Windows tokens fall back to a

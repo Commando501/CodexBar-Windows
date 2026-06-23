@@ -55,6 +55,9 @@
                     <TextBlock Text="{Binding KeyHint}" Foreground="{StaticResource TextDim}" FontSize="10"
                                Margin="0,4,0,0"
                                Visibility="{Binding ShowKeyField, Converter={StaticResource BoolToVis}}" />
+                    <Button Content="Import browser cookies" Style="{StaticResource SaveButton}"
+                            HorizontalAlignment="Left" Margin="0,8,0,0" Click="OnImportCookiesClick"
+                            Visibility="{Binding ShowCookieImport, Converter={StaticResource BoolToVis}}" />
                     <TextBlock Text="{Binding Status}" Foreground="{StaticResource Accent}" FontSize="10"
                                Margin="0,2,0,0" />
                 </StackPanel>
@@ -99,7 +102,7 @@
 
             <TextBlock Text="Providers" FontSize="16" FontWeight="Bold" Margin="0,14,0,0" />
             <TextBlock Foreground="{StaticResource TextDim}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
-                       Text="Toggle providers and set API keys. Providers marked OAuth/CLI sign in automatically; cookie-based providers aren't fully supported on Windows yet." />
+                       Text="Toggle providers and set API keys. Providers marked OAuth/CLI sign in automatically; cookie-based providers offer 'Import browser cookies' (sign in to the provider in Chrome/Edge/Brave/Firefox first)." />
         </StackPanel>
         <TextBlock x:Name="GlobalStatus" DockPanel.Dock="Bottom" Foreground="{StaticResource TextDim}"
                    FontSize="10" Margin="0,8,0,0" />
