@@ -39,7 +39,9 @@
   .\build.ps1 -Run           # build, then launch the tray
   .\build.ps1 -Release       # release build of both
   .\build.ps1 -Clean -Run    # clean rebuild, then launch
-  .\build.ps1 -Package       # full self-contained package + zip
+  .\build.ps1 -Package       # full self-contained portable folder + zip
+  .\build.ps1 -Package -Run  # build the portable version, then launch it
+  .\build.ps1 -Test          # build, then run the Swift test suite
 #>
 [CmdletBinding()]
 param(
@@ -48,7 +50,8 @@ param(
     [switch] $Clean,
     [switch] $CliOnly,
     [switch] $TrayOnly,
-    [switch] $Package
+    [switch] $Package,
+    [switch] $Test
 )
 
 $ErrorActionPreference = "Stop"
@@ -58,10 +61,18 @@ function Write-Step($n, $total, $msg) {
     Write-Host "==> $n/$total  $msg" -ForegroundColor Cyan
 }
 
-# Full package path: delegate and stop.
+# Full package path: build the portable distributable, optionally launch it.
 if ($Package) {
     & (Join-Path $repo "Scripts\win-package.ps1")
-    exit $LASTEXITCODE
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    if ($Run) {
+        $portableExe = Join-Path $repo "dist\CodexBar\CodexBarTray.exe"
+        if (-not (Test-Path $portableExe)) { throw "Portable tray not found: $portableExe" }
+        Write-Host ""
+        Write-Host "Launching portable build ..." -ForegroundColor Cyan
+        Start-Process -FilePath $portableExe
+    }
+    exit 0
 }
 
 $config = if ($Release) { "release" } else { "debug" }
@@ -121,6 +132,13 @@ Write-Host "Build complete." -ForegroundColor Green
 
 $trayExe = Join-Path $repo "WindowsTray\bin\$dotnetConfig\net8.0-windows\CodexBarTray.exe"
 if ($buildTray) { Write-Host "  Tray: $trayExe" }
+
+if ($Test) {
+    Write-Host ""
+    Write-Host "Running Swift test suite ..." -ForegroundColor Cyan
+    & cmd /c "`"$repo\Scripts\win-build.cmd`" test"
+    if ($LASTEXITCODE -ne 0) { throw "Swift tests failed." }
+}
 
 if ($Run) {
     if (-not $buildTray) { throw "-Run requires the tray to be built (don't combine with -CliOnly)." }

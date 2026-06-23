@@ -50,6 +50,15 @@ public enum AntigravityProviderDescriptor {
         case .oauth:
             return [oauth]
         case .auto:
+            #if os(Windows)
+            // The Antigravity app/IDE local probes need `ps`/`lsof` and the `agy`
+            // CLI needs a PTY launch, none of which exist on Windows. OAuth with
+            // CodexBar's own credentials (from `codexbar login`) is the only
+            // working source, so route straight to it instead of failing through
+            // the unsupported local probes with a confusing `/bin/ps` error.
+            _ = (app, cli, ide)
+            return [oauth]
+            #else
             if context.selectedTokenAccountID != nil ||
                 context.env[AntigravityOAuthCredentialsStore.environmentCredentialsKey] != nil ||
                 self.hasSharedOAuthCredentials(context: context)
@@ -57,6 +66,7 @@ public enum AntigravityProviderDescriptor {
                 return [app, cli, ide, oauth]
             }
             return [app, cli, ide]
+            #endif
         case .web, .api:
             return []
         }

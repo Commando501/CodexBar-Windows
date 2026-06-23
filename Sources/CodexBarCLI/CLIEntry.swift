@@ -44,6 +44,8 @@ enum CodexBarCLI {
                 await self.runCost(invocation.parsedValues)
             case ["serve"]:
                 await self.runServe(invocation.parsedValues)
+            case ["login"]:
+                await self.runLogin(invocation.parsedValues)
             case ["config", "validate"]:
                 self.runConfigValidate(invocation.parsedValues)
             case ["config", "dump"]:
@@ -82,6 +84,7 @@ enum CodexBarCLI {
         let usageSignature = CommandSignature.describe(UsageOptions())
         let costSignature = CommandSignature.describe(CostOptions())
         let serveSignature = CommandSignature.describe(ServeOptions())
+        let loginSignature = CommandSignature.describe(LoginOptions())
         let configSignature = CommandSignature.describe(ConfigOptions())
         let configProviderToggleSignature = CommandSignature.describe(ConfigProviderToggleOptions())
         let configSetAPIKeySignature = CommandSignature.describe(ConfigSetAPIKeyOptions())
@@ -104,6 +107,11 @@ enum CodexBarCLI {
                 abstract: "Serve usage and cost JSON over localhost HTTP",
                 discussion: nil,
                 signature: serveSignature),
+            CommandDescriptor(
+                name: "login",
+                abstract: "Sign in to a provider (antigravity)",
+                discussion: nil,
+                signature: loginSignature),
             CommandDescriptor(
                 name: "config",
                 abstract: "Config utilities",

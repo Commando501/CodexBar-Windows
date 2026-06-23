@@ -202,6 +202,13 @@ public enum AntigravityOAuthConfig {
         applicationRoots: [URL]? = nil,
         fileManager: FileManager = .default) -> [URL]
     {
+        #if os(Windows)
+        // Antigravity ships as an Electron app on Windows; the OAuth client id/secret
+        // live in the same `language_server` binary, here `resources\bin\language_server.exe`.
+        if applicationRoots == nil {
+            return self.windowsCandidateOAuthClientArtifactURLs(environment: ProcessInfo.processInfo.environment)
+        }
+        #endif
         let roots = [
             URL(fileURLWithPath: "/Applications", isDirectory: true),
             fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Applications", isDirectory: true),
@@ -221,6 +228,40 @@ public enum AntigravityOAuthConfig {
         return appBundleURLs.flatMap { bundleURL in
             relativePaths.map { bundleURL.appendingPathComponent($0) }
         }
+    }
+
+    /// Well-known Antigravity install locations on Windows. The desktop installer
+    /// drops the IDE under `%LOCALAPPDATA%\Programs\antigravity`; an all-users
+    /// install lands under `%ProgramFiles%`. The OAuth client artifact is the
+    /// native `language_server.exe`; `main.js` is kept as a text fallback.
+    static func windowsCandidateOAuthClientArtifactURLs(environment: [String: String]) -> [URL] {
+        var bases: [String] = []
+        func addInstallRoots(parent: String?) {
+            guard let parent, !parent.isEmpty else { return }
+            for name in ["antigravity", "Antigravity", "Antigravity IDE"] {
+                bases.append("\(parent)\\\(name)")
+            }
+        }
+        if let localAppData = environment["LOCALAPPDATA"], !localAppData.isEmpty {
+            addInstallRoots(parent: "\(localAppData)\\Programs")
+        }
+        addInstallRoots(parent: environment["ProgramFiles"])
+        addInstallRoots(parent: environment["ProgramFiles(x86)"])
+
+        let relativePaths = [
+            "resources\\bin\\language_server.exe",
+            "resources\\app\\out\\main.js",
+        ]
+        var seen = Set<String>()
+        var urls: [URL] = []
+        for base in bases {
+            for relative in relativePaths {
+                let fullPath = "\(base)\\\(relative)"
+                guard seen.insert(fullPath).inserted else { continue }
+                urls.append(URL(fileURLWithPath: fullPath))
+            }
+        }
+        return urls
     }
 
     private static func candidateAntigravityAppBundleURLs(
