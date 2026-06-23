@@ -88,6 +88,7 @@ public sealed class WidgetManager
             WidgetKind.Cost => new CostWidgetViewModel(config.ProviderId, name),
             WidgetKind.CostHistory => new CostHistoryWidgetViewModel(config.ProviderId, name),
             WidgetKind.BurnDown => new BurnDownWidgetViewModel(config.ProviderId, name, config.Window),
+            WidgetKind.UsageHistory => new UsageHistoryWidgetViewModel(config.ProviderId, name, config.Window),
             _ => new UsageWidgetViewModel(config.ProviderId, name),
         };
     }

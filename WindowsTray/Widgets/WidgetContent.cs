@@ -5,26 +5,30 @@ namespace CodexBarTray;
 /// <summary>The kind of content a desktop widget renders.</summary>
 public enum WidgetKind
 {
-    Usage = 0,       // a provider's rate-limit windows
-    Cost = 1,        // compact session / today / 30-day cost
-    CostHistory = 2, // mini bar chart of daily cost
-    BurnDown = 3,    // session/weekly burn-down projection chart
+    Usage = 0,        // a provider's rate-limit windows
+    Cost = 1,         // compact session / today / 30-day cost
+    CostHistory = 2,  // mini bar chart of daily cost
+    BurnDown = 3,     // session/weekly burn-down projection chart
+    UsageHistory = 4, // sampled session/weekly utilization line chart
 }
 
 /// <summary>
 /// The latest data pushed into widgets on each refresh. <see cref="Usage"/> holds
 /// the formatted tiles; <see cref="Raw"/> keeps the unformatted provider results
-/// (window minutes + reset times) that the burn-down chart needs.
+/// (window minutes + reset times) the burn-down chart needs; <see cref="History"/>
+/// is the sampled utilization store the usage-history chart reads.
 /// </summary>
 public sealed record WidgetData(
     IReadOnlyList<ProviderViewModel> Usage,
     IReadOnlyList<ProviderResult> Raw,
-    IReadOnlyList<CostResult> Cost)
+    IReadOnlyList<CostResult> Cost,
+    UsageHistoryStore History)
 {
     public static readonly WidgetData Empty = new(
         Array.Empty<ProviderViewModel>(),
         Array.Empty<ProviderResult>(),
-        Array.Empty<CostResult>());
+        Array.Empty<CostResult>(),
+        new UsageHistoryStore());
 }
 
 /// <summary>

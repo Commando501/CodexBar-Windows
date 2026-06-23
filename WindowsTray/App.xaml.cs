@@ -18,6 +18,7 @@ public partial class App : Application
     private readonly UiSettings _ui = UiSettings.Load();
     private readonly QuotaNotificationCoordinator _notifications = new();
     private readonly WidgetManager _widgets = new(WidgetStore.Load());
+    private readonly UsageHistoryStore _history = UsageHistoryStore.Load();
     private SettingsWindow? _settingsWindow;
     private UsageWindow? _usageWindow;
     private List<ProviderViewModel> _latestTiles = new();
@@ -122,16 +123,25 @@ public partial class App : Application
     {
         root.Items.Clear();
 
-        root.Items.Add(BuildAddSubmenu("Add usage widget", WidgetKind.Usage, _ => true));
-        root.Items.Add(BuildAddSubmenu("Add cost widget", WidgetKind.Cost, CostProviderIds.Contains));
-        root.Items.Add(BuildAddSubmenu("Add cost history", WidgetKind.CostHistory, CostProviderIds.Contains));
-        root.Items.Add(BuildAddSubmenu("Add burn-down (session)", WidgetKind.BurnDown, _ => true, QuotaWindowKind.Session));
-        root.Items.Add(BuildAddSubmenu("Add burn-down (weekly)", WidgetKind.BurnDown, _ => true, QuotaWindowKind.Weekly));
+        root.Items.Add(BuildAddSubmenu("Usage", WidgetKind.Usage, _ => true));
+        root.Items.Add(BuildAddSubmenu("Cost", WidgetKind.Cost, CostProviderIds.Contains));
+        root.Items.Add(BuildAddSubmenu("Cost history", WidgetKind.CostHistory, CostProviderIds.Contains));
+        root.Items.Add(BuildWindowGroupedSubmenu("Burn-down", WidgetKind.BurnDown, _ => true));
+        root.Items.Add(BuildWindowGroupedSubmenu("Usage history", WidgetKind.UsageHistory, _ => true));
 
         root.Items.Add(new Separator());
         var removeAll = new MenuItem { Header = "Remove all widgets", IsEnabled = _widgets.Count > 0 };
         removeAll.Click += (_, _) => _widgets.RemoveAll();
         root.Items.Add(removeAll);
+    }
+
+    // A parent menu with Session / Weekly sub-submenus, each listing providers.
+    private MenuItem BuildWindowGroupedSubmenu(string header, WidgetKind kind, Func<string, bool> providerFilter)
+    {
+        var menu = new MenuItem { Header = header };
+        menu.Items.Add(BuildAddSubmenu("Session", kind, providerFilter, QuotaWindowKind.Session));
+        menu.Items.Add(BuildAddSubmenu("Weekly", kind, providerFilter, QuotaWindowKind.Weekly));
+        return menu;
     }
 
     private MenuItem BuildAddSubmenu(
@@ -230,8 +240,6 @@ public partial class App : Application
                 try { costs = CostJson.Parse(await _client.GetCostJsonAsync()); }
                 catch { /* cost is best-effort; leave empty on failure */ }
             }
-            var widgetData = new WidgetData(tiles, results, costs);
-
             Dispatcher.Invoke(() =>
             {
                 _usageVm.Replace(tiles);
@@ -239,7 +247,9 @@ public partial class App : Application
                 UpdateTrayIcon(maxPercent / 100.0, connected: true);
                 foreach (var notification in notifications) ShowNotification(notification);
                 _latestTiles = tiles;
-                _widgets.UpdateData(widgetData);
+                // Sample utilization history before handing data to the widgets.
+                _history.Record(results, DateTimeOffset.Now);
+                _widgets.UpdateData(new WidgetData(tiles, results, costs, _history));
             });
             SetTooltip(tiles.Count == 0
                 ? "CodexBar — no providers enabled"

@@ -34,7 +34,7 @@ From `Package.swift`, these targets/dependencies build only on macOS:
 | Feature | Source | Windows status |
 |---|---|---|
 | Native menu-bar UI (rich menu + cards) | `CodexBar` target | Replaced by minimal WPF tray (see §4) |
-| WidgetKit widgets (Usage/History/Metric/Burn-Down) | `CodexBarWidget` + `WidgetExtension/` | Partial — pinnable **desktop widget windows** in the tray (`WindowsTray/Widgets/`): Usage, Cost (session/today/30-day), Cost-History mini-chart, and session/weekly **Burn-Down** projection charts. Burn-down needs no history endpoint — it's a live projection from the current window (`BurnGeom`), computed tray-side from `/usage`. Still missing: OS Widgets-Board host, and a true **sampled usage-history** chart (would need the engine to persist + serve intra-window samples) |
+| WidgetKit widgets (Usage/History/Metric/Burn-Down) | `CodexBarWidget` + `WidgetExtension/` | Partial — pinnable **desktop widget windows** in the tray (`WindowsTray/Widgets/`): Usage, Cost (session/today/30-day), Cost-History mini-chart, session/weekly **Burn-Down** projection charts, and sampled session/weekly **Usage-History** line charts. The tray samples utilization in-process on each `/usage` poll (`UsageHistoryStore`, the lean equivalent of macOS `PlanUtilizationHistoryStore`) and persists to `history.json`. Remaining gap: OS Widgets-Board host (would need MSIX + Windows App SDK) |
 | Claude usage watchdog helper | `CodexBarClaudeWatchdog` | Missing |
 | Claude web probe helper | `CodexBarClaudeWebProbe` | Missing |
 | Auto-update | `Sparkle` + `appcast.xml` | No updater in the tray |

@@ -161,6 +161,20 @@
                            Visibility="{Binding NoData, Converter={StaticResource BoolToVis}}" />
             </StackPanel>
         </DataTemplate>
+
+        <!-- Body: Sampled usage-history line chart -->
+        <DataTemplate DataType="{x:Type local:UsageHistoryWidgetViewModel}">
+            <StackPanel>
+                <local:UsageHistoryChart Points="{Binding Points}" Height="64" Margin="0,6,0,0"
+                                         Visibility="{Binding HasChart, Converter={StaticResource BoolToVis}}" />
+                <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource TextDim}"
+                           FontSize="11" Margin="0,4,0,0"
+                           Visibility="{Binding HasChart, Converter={StaticResource BoolToVis}}" />
+                <TextBlock Text="{Binding EmptyText}" Foreground="{StaticResource TextDim}"
+                           FontSize="11" Margin="0,4,0,0"
+                           Visibility="{Binding NoChart, Converter={StaticResource BoolToVis}}" />
+            </StackPanel>
+        </DataTemplate>
     </Window.Resources>
 
     <Window.ContextMenu>
