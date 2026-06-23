@@ -63,7 +63,12 @@ headless engine loses them on Windows:
   `WebKit/WebKitTeardown`. All macOS-only (no WebView2 replacement yet).
 - **Interactive CLI / PTY login** — `Host/PTY/TTYCommandRunner` is stubbed by
   `TTYCommandRunnerWindowsStub`. Claude/Codex/Antigravity CLI sessions throw
-  *"… PTY session is not supported on Windows yet."*
+  *"… PTY session is not supported on Windows yet."* ✅ *Partial Windows path*:
+  **Antigravity** has a non-PTY browser OAuth login — `codexbar login --provider
+  antigravity` (`CLILoginCommand.swift` + `AntigravityOAuthLogin.swift`) runs the
+  Google OAuth flow, saves credentials, and optionally enables the provider. Claude
+  and Codex still have no Windows login path (Claude OAuth instead self-refreshes an
+  existing `~/.claude/.credentials.json`). Not yet wired into the WPF tray UI.
 - **App Group / shared container** (`AppGroupSupport`) — macOS-only (widget data
   sharing).
 - **Browser detection / cookie access gate / import order** — all macOS-only.
@@ -97,7 +102,7 @@ a working API-key path but loses its cookie/web/CLI extras on Windows; **Broken*
 | OpenAI | Dashboard credits/usage web scraping (API usage works) |
 | Claude | Web fetch + CLI PTY login (existing OAuth/API token works) |
 | Codex | Web dashboard + CLI session (existing OAuth token works) |
-| Antigravity | CLI session login |
+| Antigravity | CLI session login (PTY) — but `codexbar login --provider antigravity` adds a browser OAuth login on Windows |
 | Copilot | Budget web fetch |
 | Cursor | Cookie/web status probe |
 | Factory | localStorage import |
@@ -125,7 +130,9 @@ the menu items **Refresh**, **Settings…**, **Always on screen**,
 **Start with Windows**, **Quit**. Not yet ported:
 
 - **Sign-in flows**: `ClaudeLoginRunner`, `CodexLoginRunner`, `CursorLoginRunner`,
-  `GeminiLoginRunner` (no interactive login UI on Windows).
+  `GeminiLoginRunner` (no interactive login UI in the tray). The CLI now has
+  `codexbar login --provider antigravity` (browser OAuth), but the tray does not
+  surface any login command yet.
 - **Charts**: cost history, credits history, plan-utilization history, usage
   breakdown, storage breakdown, Z.ai hourly.
 - **Multi-account management**: managed Codex accounts, account switching /
@@ -164,7 +171,8 @@ the menu items **Refresh**, **Settings…**, **Always on screen**,
    Degraded cookie cases).
 2. **Secure token storage** (DPAPI / Windows Credential Manager) replacing the
    plaintext `TokenAccounts` file.
-3. **Interactive login** (PTY replacement) for Claude / Codex / Antigravity.
+3. **Interactive login** (PTY replacement) for Claude / Codex. (Antigravity now has
+   a browser OAuth login via `codexbar login`; still needs tray UI wiring.)
 4. **WebKit dashboard scraping** replacement (e.g. WebView2) for OpenAI / Claude /
    Codex web paths.
 5. **Tray UI parity** — charts, multi-account, cost view. (Native notifications
