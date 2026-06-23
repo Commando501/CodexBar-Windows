@@ -114,6 +114,17 @@ public enum SubprocessRunner {
     @discardableResult
     package static func terminateProcess(_ process: Process, processGroup: pid_t?) -> Bool {
         guard process.isRunning else { return false }
+        #if os(Windows)
+        // Windows has no POSIX process groups or signals; Foundation's
+        // `terminate()` issues a TerminateProcess on the child. Process-tree
+        // teardown (ConPTY/job objects) is a later enhancement.
+        process.terminate()
+        let killDeadline = Date().addingTimeInterval(0.4)
+        while process.isRunning, Date() < killDeadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        return true
+        #else
         let descendants = TTYProcessTreeTerminator.descendantPIDs(of: process.processIdentifier)
         let descendantIdentities = descendants.compactMap(TTYProcessTreeTerminator.processIdentity(for:))
         TTYProcessTreeTerminator.terminateProcessTree(
@@ -144,6 +155,7 @@ public enum SubprocessRunner {
             }
         }
         return true
+        #endif
     }
 
     // MARK: - Public API
@@ -200,7 +212,13 @@ public enum SubprocessRunner {
         stderrCapture.start()
 
         let pid = process.processIdentifier
+        #if os(Windows)
+        // No POSIX process groups on Windows; terminate the child directly.
+        let processGroup: pid_t? = nil
+        _ = pid
+        #else
         let processGroup: pid_t? = setpgid(pid, pid) == 0 ? pid : nil
+        #endif
 
         let exitCodeTask = Task<Int32, Never> {
             await termination.wait()

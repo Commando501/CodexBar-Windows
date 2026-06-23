@@ -27,6 +27,11 @@ Codexbar.app/
 Icon.iconset
 debug_*.swift
 
+# Windows tray (.NET) + packaging
+dist/
+WindowsTray/bin/
+WindowsTray/obj/
+
 # Misc
 .DS_Store
 .vscode/

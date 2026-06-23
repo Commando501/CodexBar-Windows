@@ -1130,7 +1130,12 @@ extension GeminiStatusProbe {
         stdoutCapture.start()
         stderrCapture.start()
         let pid = process.processIdentifier
+        #if os(Windows)
+        let processGroup: pid_t? = nil
+        _ = pid
+        #else
         let processGroup: pid_t? = setpgid(pid, pid) == 0 ? pid : nil
+        #endif
 
         let didExit = exitSemaphore.wait(timeout: .now() + timeout) == .success
         if !didExit {

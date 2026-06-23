@@ -1,10 +1,10 @@
 import Foundation
-#if canImport(Musl)
-import Musl
+#if canImport(Darwin)
+import Darwin
 #elseif canImport(Glibc)
 import Glibc
-#else
-import Darwin
+#elseif canImport(Musl)
+import Musl
 #endif
 
 extension CostUsageScanner {
@@ -624,6 +624,20 @@ extension CostUsageScanner {
 
     static func codexFileMetadata(fileURL: URL) -> CodexFileMetadata {
         let path = fileURL.path
+        #if os(Windows)
+        // Windows lacks fstatat/struct stat with nanosecond mtime; use Foundation
+        // file attributes, which are available cross-platform.
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path) else {
+            return CodexFileMetadata(path: path, mtimeUnixMs: 0, size: 0, fileId: nil)
+        }
+        let mtimeUnixMs = (attributes[.modificationDate] as? Date)
+            .map { Int64($0.timeIntervalSince1970 * 1000) } ?? 0
+        let size = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+        let inode = (attributes[.systemFileNumber] as? NSNumber)?.int64Value
+        let device = (attributes[.systemNumber] as? NSNumber)?.int64Value
+        let fileId: String? = if let inode, let device { "\(device):\(inode)" } else { nil }
+        return CodexFileMetadata(path: path, mtimeUnixMs: mtimeUnixMs, size: size, fileId: fileId)
+        #else
         var info = stat()
         guard path.withCString({ fstatat(AT_FDCWD, $0, &info, 0) }) == 0 else {
             return CodexFileMetadata(path: path, mtimeUnixMs: 0, size: 0, fileId: nil)
@@ -640,6 +654,7 @@ extension CostUsageScanner {
             mtimeUnixMs: modifiedSeconds * 1000 + modifiedNanoseconds / 1_000_000,
             size: Int64(info.st_size),
             fileId: "\(info.st_dev):\(info.st_ino)")
+        #endif
     }
 
     static func dropCachedCodexFile(

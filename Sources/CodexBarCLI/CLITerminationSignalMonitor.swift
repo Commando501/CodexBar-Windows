@@ -9,6 +9,24 @@ import Glibc
 import Musl
 #endif
 
+#if os(Windows)
+// POSIX signal monitoring (DispatchSourceSignal + sigaction) is unavailable on
+// Windows. A no-op stub keeps the CLI building; Ctrl+C handling via
+// SetConsoleCtrlHandler is a future enhancement.
+final class CLITerminationSignalMonitor: @unchecked Sendable {
+    static let signalNumbers: [Int32] = []
+
+    init(onSignal: @escaping @Sendable (Int32) -> Void) { _ = onSignal }
+
+    func cancel() {}
+
+    static func terminateActiveHelpersAndReraise(_ signalNumber: Int32) {
+        TTYCommandRunner.terminateActiveProcessesForAppShutdown()
+        _ = signalNumber
+    }
+}
+#else
+
 private func handleCLITerminationSignal(_: Int32) {}
 
 final class CLITerminationSignalMonitor: @unchecked Sendable {
@@ -77,3 +95,4 @@ final class CLITerminationSignalMonitor: @unchecked Sendable {
         #endif
     }
 }
+#endif

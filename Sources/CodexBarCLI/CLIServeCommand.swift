@@ -12,7 +12,7 @@ struct ServeOptions: CommanderParsable {
     @Option(name: .long("log-level"), help: "Set log level (trace|verbose|debug|info|warning|error|critical)")
     var logLevel: String?
 
-    @Option(name: .long("port"), help: "Local HTTP port (default: 8080)")
+    @Option(name: .long("port"), help: "Local HTTP port (default: 8080; 0 = auto-select a free port)")
     var port: Int?
 
     @Option(name: .long("refresh-interval"), help: "Response cache TTL in seconds (default: 60)")
@@ -408,7 +408,7 @@ private enum CLIServeArgumentError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidPort:
-            "--port must be between 1 and 65535."
+            "--port must be between 0 and 65535 (0 = auto-select a free port)."
         case .invalidRefreshInterval:
             "--refresh-interval must be zero or greater."
         case .invalidRequestTimeout:
@@ -472,8 +472,8 @@ extension CodexBarCLI {
         defer { signalMonitor.cancel() }
 
         do {
-            try await server.run {
-                Self.writeStderr("CodexBar server listening on http://127.0.0.1:\(port)\n")
+            try await server.run { actualPort in
+                Self.writeStderr("CodexBar server listening on http://127.0.0.1:\(actualPort)\n")
             }
         } catch {
             await Self.shutdownServeSessions()
@@ -496,7 +496,9 @@ extension CodexBarCLI {
         } else {
             parsed = 8080
         }
-        guard parsed > 0, parsed <= Int(UInt16.max) else { return nil }
+        // Port 0 asks the OS for a free ephemeral port; the actual bound port is
+        // reported on stderr once listening (useful for the tray/auto-launch).
+        guard parsed >= 0, parsed <= Int(UInt16.max) else { return nil }
         return UInt16(parsed)
     }
 

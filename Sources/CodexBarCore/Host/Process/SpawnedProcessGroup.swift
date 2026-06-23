@@ -1,3 +1,6 @@
+// POSIX process-group launcher (posix_spawn). Not available on Windows yet;
+// callers gate their usage behind `#if !os(Windows)` or platform stubs.
+#if !os(Windows)
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
@@ -566,3 +569,4 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         return signal == 0 ? (rawStatus >> 8) & 0xFF : signal
     }
 }
+#endif

@@ -271,6 +271,11 @@ actor ClaudeCLISession {
         }
         self.cleanup()
 
+        #if os(Windows)
+        // openpty/termios-based PTY sessions require ConPTY on Windows (not yet
+        // ported). Claude usage falls back to the OAuth/cookie paths instead.
+        throw SessionError.launchFailed("Claude CLI PTY session is not supported on Windows yet")
+        #else
         var primaryFD: Int32 = -1
         var secondaryFD: Int32 = -1
         var win = winsize(ws_row: 50, ws_col: 160, ws_xpixel: 0, ws_ypixel: 0)
@@ -350,6 +355,7 @@ actor ClaudeCLISession {
         self.processGroup = processGroup
         self.binaryPath = binary
         self.startedAt = Date()
+        #endif
     }
 
     static func launchEnvironment(baseEnv: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
@@ -395,7 +401,7 @@ actor ClaudeCLISession {
         let waitDeadline = Date().addingTimeInterval(1.0)
         if let proc = self.process {
             while proc.isRunning, Date() < waitDeadline {
-                usleep(100_000)
+                Thread.sleep(forTimeInterval: 0.1)
             }
             if proc.isRunning {
                 TTYProcessTreeTerminator.terminateProcessTree(
@@ -404,9 +410,11 @@ actor ClaudeCLISession {
                     signal: SIGKILL,
                     knownDescendants: descendants)
             } else {
+                #if !os(Windows)
                 for pid in descendants where pid > 0 {
                     kill(pid, SIGKILL)
                 }
+                #endif
             }
             TTYCommandRunner.unregisterActiveProcessForAppShutdown(pid: proc.processIdentifier)
         }
@@ -421,6 +429,9 @@ actor ClaudeCLISession {
 
     private func readChunk() -> Data {
         guard self.primaryFD >= 0 else { return Data() }
+        #if os(Windows)
+        return Data()
+        #else
         var appended = Data()
         while true {
             var tmp = [UInt8](repeating: 0, count: 8192)
@@ -432,6 +443,7 @@ actor ClaudeCLISession {
             break
         }
         return appended
+        #endif
     }
 
     private func drainOutput() {
@@ -461,6 +473,9 @@ actor ClaudeCLISession {
 
     private func writeAllToPrimary(_ data: Data) throws {
         guard self.primaryFD >= 0 else { throw SessionError.processExited }
+        #if os(Windows)
+        _ = data
+        #else
         try data.withUnsafeBytes { rawBytes in
             guard let baseAddress = rawBytes.baseAddress else { return }
             var offset = 0
@@ -486,5 +501,6 @@ actor ClaudeCLISession {
                 throw SessionError.ioFailed("write to PTY failed: \(String(cString: strerror(err)))")
             }
         }
+        #endif
     }
 }

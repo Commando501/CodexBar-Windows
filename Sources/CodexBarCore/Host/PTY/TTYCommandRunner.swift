@@ -1,3 +1,7 @@
+// PTY-based interactive command runner (forkpty/termios) and POSIX process-tree
+// terminator. Windows would require ConPTY + job objects; not yet ported, so the
+// whole file is gated out and callers fall back to non-PTY paths or stubs.
+#if !os(Windows)
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
@@ -1174,3 +1178,4 @@ extension TTYCommandRunner {
         self.resolveShutdownTargets(targets, hostProcessGroup: hostProcessGroup, groupResolver: groupResolver)
     }
 }
+#endif

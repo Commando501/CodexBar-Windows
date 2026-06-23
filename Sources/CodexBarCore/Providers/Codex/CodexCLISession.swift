@@ -277,6 +277,11 @@ actor CodexCLISession {
         }
         self.cleanup()
 
+        #if os(Windows)
+        // openpty/termios-based PTY sessions require ConPTY on Windows (not yet
+        // ported). Codex usage falls back to the OAuth/API paths instead.
+        throw SessionError.launchFailed("Codex CLI PTY session is not supported on Windows yet")
+        #else
         var primaryFD: Int32 = -1
         var secondaryFD: Int32 = -1
         var win = winsize(ws_row: options.rows, ws_col: options.cols, ws_xpixel: 0, ws_ypixel: 0)
@@ -347,6 +352,7 @@ actor CodexCLISession {
         self.sessionEnvironment = options.environment
         self.sessionArguments = options.extraArgs
         self.sessionWorkingDirectory = options.workingDirectory
+        #endif
     }
 
     private func cleanup() {
@@ -370,7 +376,7 @@ actor CodexCLISession {
         let waitDeadline = Date().addingTimeInterval(1.0)
         if let proc = self.process {
             while proc.isRunning, Date() < waitDeadline {
-                usleep(100_000)
+                Thread.sleep(forTimeInterval: 0.1)
             }
             if proc.isRunning {
                 TTYProcessTreeTerminator.terminateProcessTree(
@@ -379,9 +385,11 @@ actor CodexCLISession {
                     signal: SIGKILL,
                     knownDescendants: descendants)
             } else {
+                #if !os(Windows)
                 for pid in descendants where pid > 0 {
                     kill(pid, SIGKILL)
                 }
+                #endif
             }
             TTYCommandRunner.unregisterActiveProcessForAppShutdown(pid: proc.processIdentifier)
         }
@@ -402,6 +410,9 @@ actor CodexCLISession {
 
     private func readChunk() -> Data {
         guard self.primaryFD >= 0 else { return Data() }
+        #if os(Windows)
+        return Data()
+        #else
         var appended = Data()
         while true {
             var tmp = [UInt8](repeating: 0, count: 8192)
@@ -413,6 +424,7 @@ actor CodexCLISession {
             break
         }
         return appended
+        #endif
     }
 
     private func drainOutput() {

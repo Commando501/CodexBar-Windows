@@ -5,6 +5,8 @@ import Darwin
 import Glibc
 #elseif canImport(Musl)
 import Musl
+#elseif canImport(WinSDK)
+import WinSDK
 #endif
 
 private let requestReadTimeoutMilliseconds: Int32 = 5000
@@ -193,6 +195,13 @@ struct CLILocalHTTPResponse {
     }
 }
 
+struct CLILocalHTTPServerUnsupportedError: LocalizedError {
+    var errorDescription: String? {
+        "The local HTTP server (`codexbar serve`) is not yet supported on Windows. "
+            + "Use the one-shot commands (e.g. `codexbar usage --json`) instead."
+    }
+}
+
 final class CLILocalHTTPServer: @unchecked Sendable {
     typealias Handler = @Sendable (CLILocalHTTPRequest) async -> CLILocalHTTPResponse
 
@@ -215,7 +224,13 @@ final class CLILocalHTTPServer: @unchecked Sendable {
         self.stateLock.unlock()
     }
 
-    func run(onListening: @Sendable () -> Void = {}) async throws {
+    /// Runs the local HTTP server. `onListening` is invoked once the socket is
+    /// bound and listening, with the actual bound port (which differs from the
+    /// requested port when `port == 0`, i.e. an OS-assigned ephemeral port).
+    func run(onListening: @Sendable (UInt16) -> Void = { _ in }) async throws {
+        #if os(Windows)
+        try await self.runWinsock(onListening: onListening)
+        #else
         ignoreSIGPIPE()
 
         #if canImport(Darwin)
@@ -276,7 +291,16 @@ final class CLILocalHTTPServer: @unchecked Sendable {
                 closeSocket(serverFD)
             }
         }
-        onListening()
+
+        var boundAddress = sockaddr_in()
+        var boundLength = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let resolved = withUnsafeMutablePointer(to: &boundAddress) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                getsockname(serverFD, socketAddress, &boundLength) == 0
+            }
+        }
+        let actualPort = resolved ? UInt16(bigEndian: boundAddress.sin_port) : self.port
+        onListening(actualPort)
 
         while !self.isStopRequested {
             guard waitForReadable(serverFD, timeoutMilliseconds: 250) else {
@@ -298,7 +322,76 @@ final class CLILocalHTTPServer: @unchecked Sendable {
                 await handleClient(clientFD, handler: handler)
             }
         }
+        #endif
     }
+
+    #if os(Windows)
+    private func runWinsock(onListening: @Sendable (UInt16) -> Void) async throws {
+        guard winsockStarted else {
+            throw CLILocalHTTPServerWinsockError(code: WSAGetLastError(), context: "WSAStartup")
+        }
+
+        let serverSocket = socket(AF_INET, SOCK_STREAM, 0)
+        guard serverSocket != INVALID_SOCKET else {
+            throw CLILocalHTTPServerWinsockError(code: WSAGetLastError(), context: "socket")
+        }
+        var ownsSocket = true
+        defer { if ownsSocket { _ = closesocket(serverSocket) } }
+
+        var reuse: Int32 = 1
+        withUnsafePointer(to: &reuse) { pointer in
+            pointer.withMemoryRebound(to: CChar.self, capacity: MemoryLayout<Int32>.size) { optval in
+                _ = setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, optval, Int32(MemoryLayout<Int32>.size))
+            }
+        }
+
+        var address = sockaddr_in()
+        address.sin_family = ADDRESS_FAMILY(AF_INET)
+        address.sin_port = self.port.bigEndian
+        guard self.host.withCString({ inet_pton(AF_INET, $0, &address.sin_addr) }) == 1 else {
+            throw CLILocalHTTPServerWinsockError(code: WSAGetLastError(), context: "inet_pton")
+        }
+
+        let bound = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                bind(serverSocket, socketAddress, Int32(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard bound != SOCKET_ERROR else {
+            throw CLILocalHTTPServerWinsockError(code: WSAGetLastError(), context: "bind")
+        }
+        guard listen(serverSocket, 16) != SOCKET_ERROR else {
+            throw CLILocalHTTPServerWinsockError(code: WSAGetLastError(), context: "listen")
+        }
+
+        var boundAddress = sockaddr_in()
+        var boundLength = Int32(MemoryLayout<sockaddr_in>.size)
+        let resolved = withUnsafeMutablePointer(to: &boundAddress) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                getsockname(serverSocket, socketAddress, &boundLength) == 0
+            }
+        }
+        let actualPort = resolved ? UInt16(bigEndian: boundAddress.sin_port) : self.port
+        onListening(actualPort)
+
+        while !self.isStopRequested {
+            var pollFD = WSAPOLLFD(fd: serverSocket, events: Int16(POLLRDNORM), revents: 0)
+            let ready = WSAPoll(&pollFD, 1, 250)
+            guard ready > 0, (pollFD.revents & Int16(POLLRDNORM)) != 0 else { continue }
+
+            let clientSocket = accept(serverSocket, nil, nil)
+            guard clientSocket != INVALID_SOCKET else {
+                if self.isStopRequested { return }
+                continue
+            }
+            let handler = self.handler
+            Task {
+                defer { _ = closesocket(clientSocket) }
+                await handleClientWin(clientSocket, handler: handler)
+            }
+        }
+    }
+    #endif
 
     private var isStopRequested: Bool {
         self.stateLock.lock()
@@ -324,6 +417,7 @@ final class CLILocalHTTPServer: @unchecked Sendable {
     }
 }
 
+#if !os(Windows)
 private func handleClient(
     _ clientFD: Int32,
     handler: @Sendable (CLILocalHTTPRequest) async -> CLILocalHTTPResponse) async
@@ -431,3 +525,92 @@ private func closeSocket(_ fd: Int32) {
     Musl.close(fd)
     #endif
 }
+#endif
+
+#if os(Windows)
+// Winsock implementation of the local HTTP server helpers (BSD-socket parity).
+
+/// Initializes Winsock once (idempotent across the process). Lazily evaluated
+/// on first access; `true` when WSAStartup succeeded.
+let winsockStarted: Bool = {
+    var data = WSADATA()
+    return WSAStartup(0x0202, &data) == 0
+}()
+
+struct CLILocalHTTPServerWinsockError: LocalizedError {
+    let code: Int32
+    let context: String
+    var errorDescription: String? {
+        "The local HTTP server failed during \(context) (Winsock error \(code))."
+    }
+}
+
+private func handleClientWin(
+    _ clientSocket: SOCKET,
+    handler: @Sendable (CLILocalHTTPRequest) async -> CLILocalHTTPResponse) async
+{
+    let request: CLILocalHTTPRequest
+    switch readRequestWin(clientSocket) {
+    case let .success(parsedRequest):
+        request = parsedRequest
+    case .failure(.disallowedHost):
+        sendResponseWin(
+            CLILocalHTTPResponse(status: .forbidden, body: Data(#"{"error":"forbidden host"}"#.utf8)),
+            to: clientSocket)
+        return
+    case .failure:
+        sendResponseWin(
+            CLILocalHTTPResponse(status: .badRequest, body: Data(#"{"error":"invalid request"}"#.utf8)),
+            to: clientSocket)
+        return
+    }
+
+    let response = await handler(request)
+    sendResponseWin(response, to: clientSocket)
+}
+
+private func readRequestWin(_ clientSocket: SOCKET) -> Result<CLILocalHTTPRequest, CLILocalHTTPRequestParseError> {
+    var data = Data()
+    var buffer = [CChar](repeating: 0, count: 4096)
+    var sawHeaderEnd = false
+
+    while data.count < 16384 {
+        guard waitForReadableWin(clientSocket, timeoutMilliseconds: requestReadTimeoutMilliseconds) else {
+            return .failure(.invalidRequest)
+        }
+        let count = recv(clientSocket, &buffer, Int32(buffer.count), 0)
+        guard count > 0 else { break }
+        buffer.withUnsafeBytes { rawBuffer in
+            if let base = rawBuffer.baseAddress {
+                data.append(base.assumingMemoryBound(to: UInt8.self), count: Int(count))
+            }
+        }
+        if data.range(of: Data("\r\n\r\n".utf8)) != nil {
+            sawHeaderEnd = true
+            break
+        }
+    }
+
+    guard sawHeaderEnd else { return .failure(.invalidRequest) }
+    return CLILocalHTTPRequest.parse(data)
+}
+
+private func sendResponseWin(_ response: CLILocalHTTPResponse, to clientSocket: SOCKET) {
+    let payload = response.serialized
+    payload.withUnsafeBytes { rawBuffer in
+        guard let base = rawBuffer.baseAddress?.assumingMemoryBound(to: CChar.self) else { return }
+        var sent = 0
+        while sent < payload.count {
+            let count = send(clientSocket, base.advanced(by: sent), Int32(payload.count - sent), 0)
+            guard count > 0 else { break }
+            sent += Int(count)
+        }
+    }
+}
+
+private func waitForReadableWin(_ clientSocket: SOCKET, timeoutMilliseconds: Int32) -> Bool {
+    var pollFD = WSAPOLLFD(fd: clientSocket, events: Int16(POLLRDNORM), revents: 0)
+    let result = WSAPoll(&pollFD, 1, timeoutMilliseconds)
+    return result > 0 && (pollFD.revents & Int16(POLLRDNORM)) != 0
+}
+#endif

@@ -1,0 +1,4 @@
+# Build artifacts (regenerate with Scripts/win-build-sqlite.cmd). The vendored
+# amalgamation source (sqlite3.c / sqlite3.h) is intentionally kept.
+*.lib
+*.obj

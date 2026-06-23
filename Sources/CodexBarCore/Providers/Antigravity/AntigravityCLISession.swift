@@ -822,6 +822,7 @@ actor AntigravityCLISession {
 // MARK: - Production Process Implementation
 
 struct AntigravityPTYProcessLauncher: AntigravityCLIProcessLaunching {
+    #if !os(Windows)
     static func defaultSignalsForSpawn() -> sigset_t {
         var signals = sigset_t()
         sigemptyset(&signals)
@@ -847,12 +848,20 @@ struct AntigravityPTYProcessLauncher: AntigravityCLIProcessLaunching {
         }
         return result
     }
+    #endif
 
     func launch(binary: String) throws -> any AntigravityCLIProcessHandle {
         try self.launch(binary: binary, arguments: [])
     }
 
     func launch(binary: String, arguments: [String]) throws -> any AntigravityCLIProcessHandle {
+        #if os(Windows)
+        // openpty + posix_spawn PTY launching requires ConPTY on Windows (not
+        // yet ported). Antigravity CLI probing is unavailable on Windows.
+        _ = (binary, arguments)
+        throw AntigravityCLISession.SessionError.launchFailed(
+            "Antigravity CLI PTY session is not supported on Windows yet")
+        #else
         var primaryFD: Int32 = -1
         var secondaryFD: Int32 = -1
         var win = winsize(ws_row: 50, ws_col: 160, ws_xpixel: 0, ws_ypixel: 0)
@@ -961,9 +970,11 @@ struct AntigravityPTYProcessLauncher: AntigravityCLIProcessLaunching {
             primaryFD: primaryFD,
             primaryHandle: primaryHandle,
             secondaryHandle: secondaryHandle)
+        #endif
     }
 }
 
+#if !os(Windows)
 final class AntigravitySpawnedPTYProcessHandle: AntigravityCLIProcessHandle, @unchecked Sendable {
     private let lock = NSLock()
     private let processPID: pid_t
@@ -1101,6 +1112,7 @@ final class AntigravitySpawnedPTYProcessHandle: AntigravityCLIProcessHandle, @un
         }
     }
 }
+#endif
 
 // MARK: - Production Stale Session Identity + Storage
 
@@ -1126,7 +1138,7 @@ struct AntigravityProcessIdentityProvider: AntigravityCLIProcessIdentityProvidin
         guard size == Int32(MemoryLayout<proc_bsdinfo>.stride) else { return nil }
         let startEpoch = TimeInterval(info.pbi_start_tvsec) + (TimeInterval(info.pbi_start_tvusec) / 1_000_000)
         return AntigravityCLIProcessIdentity(executablePath: executablePath, startEpoch: startEpoch)
-        #else
+        #elseif os(Linux)
         let procDirectory = "/proc/\(pid)"
         guard let executablePath = try? FileManager.default.destinationOfSymbolicLink(
             atPath: "\(procDirectory)/exe"),
@@ -1154,6 +1166,10 @@ struct AntigravityProcessIdentityProvider: AntigravityCLIProcessIdentityProvidin
         }
         let startEpoch = bootEpoch + (startTicks / TimeInterval(clockTicksPerSecond))
         return AntigravityCLIProcessIdentity(executablePath: executablePath, startEpoch: startEpoch)
+        #else
+        // No /proc or process-start introspection available on Windows yet.
+        _ = pid
+        return nil
         #endif
     }
 }
@@ -1251,6 +1267,11 @@ final class AntigravityFileCLISessionLaunchLock: AntigravityCLISessionLaunchLock
     func withLock<T>(_ operation: () throws -> T) throws -> T {
         let directory = self.fileURL.deletingLastPathComponent()
         try self.fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        #if os(Windows)
+        // POSIX flock-based cross-process locking is unavailable on Windows.
+        // TODO(windows): use a named mutex / LockFileEx for cross-process safety.
+        return try operation()
+        #else
         let fd = open(self.fileURL.path, O_CREAT | O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR)
         guard fd >= 0 else {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
@@ -1266,5 +1287,6 @@ final class AntigravityFileCLISessionLaunchLock: AntigravityCLISessionLaunchLock
             }
         }
         return try operation()
+        #endif
     }
 }

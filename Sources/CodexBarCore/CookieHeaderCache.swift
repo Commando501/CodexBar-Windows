@@ -797,6 +797,12 @@ public enum CookieHeaderCache {
             try FileManager.default.createDirectory(
                 at: lockURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true)
+            #if os(Windows)
+            // POSIX flock-based cross-process locking is unavailable on Windows;
+            // the in-process NSLock above serializes mutations for our use.
+            _ = lockURL
+            return try operation()
+            #else
             let fd = open(lockURL.path, O_CREAT | O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR)
             guard fd >= 0 else {
                 throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
@@ -811,6 +817,7 @@ public enum CookieHeaderCache {
                 }
             }
             return try operation()
+            #endif
         }
     }
 

@@ -158,6 +158,20 @@ public enum CodexOAuthCredentialsStore {
             ".\(url.lastPathComponent).codexbar-staged-\(UUID().uuidString)",
             isDirectory: false)
         let stagedPath = stagedURL.path
+        #if os(Windows)
+        // POSIX open(O_EXCL|O_CLOEXEC)+fchmod(0600) is unavailable on Windows;
+        // write atomically via Foundation. TODO(windows-security): restrict the
+        // file ACL to the current user (the macOS/Linux path enforces 0600).
+        _ = stagedPath
+        do {
+            try data.write(to: stagedURL, options: [.atomic])
+            try beforePublish?(stagedURL)
+            try self.renameItem(at: stagedURL, to: url)
+        } catch {
+            try? fileManager.removeItem(at: stagedURL)
+            throw error
+        }
+        #else
         let descriptor = stagedPath.withCString {
             open($0, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode_t(0o600))
         }
@@ -185,6 +199,7 @@ public enum CodexOAuthCredentialsStore {
             try? fileManager.removeItem(at: stagedURL)
             throw error
         }
+        #endif
     }
 
     private static func renameItem(at sourceURL: URL, to destinationURL: URL) throws {

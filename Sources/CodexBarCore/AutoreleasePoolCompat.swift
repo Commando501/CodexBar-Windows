@@ -1,6 +1,6 @@
 import Foundation
 
-#if os(Linux)
+#if !canImport(Darwin)
 @discardableResult
 func autoreleasepool<Result>(_ work: () throws -> Result) rethrows -> Result {
     try work()

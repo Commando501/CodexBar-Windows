@@ -1,5 +1,5 @@
 {
-  "originHash" : "43e102e278b77848e0b9968436730835bbb506076e9b371d8f21f262aa5242eb",
+  "originHash" : "67b12e829d997417a0387fefe2a52334a536ec8c8195780b050c170051e4698c",
   "pins" : [
     {
       "identity" : "commander",
@@ -8,24 +8,6 @@
       "state" : {
         "revision" : "ae2ce746b386ff94b26648cfe5625cfa8d02639b",
         "version" : "0.2.2"
-      }
-    },
-    {
-      "identity" : "keyboardshortcuts",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/sindresorhus/KeyboardShortcuts",
-      "state" : {
-        "revision" : "1aef85578fdd4f9eaeeb8d53b7b4fc31bf08fe27",
-        "version" : "2.4.0"
-      }
-    },
-    {
-      "identity" : "sparkle",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/sparkle-project/Sparkle",
-      "state" : {
-        "revision" : "066e75a8b3e99962685d6a90cdd5293ebffd9261",
-        "version" : "2.9.1"
       }
     },
     {
@@ -62,14 +44,6 @@
       "state" : {
         "revision" : "5073617dac96330a486245e4c0179cb0a6fd2256",
         "version" : "1.12.0"
-      }
-    },
-    {
-      "identity" : "vortex",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/zats/Vortex",
-      "state" : {
-        "revision" : "ef5392088d4aeb255c4eee83157dbdafcd31bf07"
       }
     }
   ],

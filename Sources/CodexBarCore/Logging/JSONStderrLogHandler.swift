@@ -63,10 +63,15 @@ private struct JSONLogLine: Encodable {
 
 extension JSONStderrLogHandler {
     private static func writeStderr(_ text: String) {
+        #if os(Windows)
+        // ucrt does not expose the POSIX `write`/`STDERR_FILENO`; use Foundation.
+        FileHandle.standardError.write(Data(text.utf8))
+        #else
         let bytes = Array(text.utf8)
         bytes.withUnsafeBytes { buffer in
             guard let baseAddress = buffer.baseAddress else { return }
             _ = write(STDERR_FILENO, baseAddress, buffer.count)
         }
+        #endif
     }
 }

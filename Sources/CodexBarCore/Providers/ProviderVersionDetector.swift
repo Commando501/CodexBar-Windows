@@ -107,7 +107,11 @@ public enum ProviderVersionDetector {
         }
 
         guard proc.isRunning else { return true }
+        #if os(Windows)
+        proc.terminate()
+        #else
         kill(proc.processIdentifier, SIGKILL)
+        #endif
         return exitSemaphore.wait(timeout: .now() + 1.0) == .success
     }
 }

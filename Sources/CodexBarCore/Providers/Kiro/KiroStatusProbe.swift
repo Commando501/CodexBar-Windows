@@ -465,6 +465,11 @@ public struct KiroStatusProbe: Sendable {
         timeout: TimeInterval,
         idleTimeout: TimeInterval = 5.0) async throws -> KiroCLIResult
     {
+        #if os(Windows)
+        // Kiro CLI probing launches a child via POSIX process groups
+        // (SpawnedProcessGroup), which is not yet available on Windows.
+        throw KiroStatusProbeError.cliNotFound
+        #else
         guard let binary = self.cliBinaryResolver() else {
             throw KiroStatusProbeError.cliNotFound
         }
@@ -574,6 +579,7 @@ public struct KiroStatusProbe: Sendable {
             stderr: ProcessPipeCapture.decodeUTF8(output.stderr),
             terminationStatus: terminationStatus,
             terminatedForIdle: didTerminateForIdle)
+        #endif
     }
 
     func parse(

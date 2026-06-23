@@ -4,6 +4,8 @@ import Darwin
 import Glibc
 #elseif canImport(Musl)
 import Musl
+#elseif canImport(ucrt)
+import ucrt
 #endif
 import Foundation
 
@@ -118,6 +120,8 @@ extension CodexBarCLI {
         Glibc.exit(code)
         #elseif canImport(Musl)
         Musl.exit(code)
+        #elseif canImport(ucrt)
+        ucrt.exit(code)
         #endif
     }
 }

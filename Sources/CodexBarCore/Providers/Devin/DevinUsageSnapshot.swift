@@ -1,4 +1,6 @@
+#if canImport(CoreFoundation)
 import CoreFoundation
+#endif
 import Foundation
 
 public enum DevinUsageError: LocalizedError, Sendable {
@@ -281,7 +283,13 @@ public enum DevinUsageParser {
     private static func double(_ value: Any?) -> Double? {
         switch value {
         case let number as NSNumber:
+            #if canImport(Darwin)
             CFGetTypeID(number) == CFBooleanGetTypeID() ? nil : number.doubleValue
+            #else
+            // CoreFoundation type IDs are unavailable off Darwin; exclude booleans
+            // by checking the NSNumber's Objective-C type encoding ("c" == bool/char).
+            (String(cString: number.objCType) == "c") ? nil : number.doubleValue
+            #endif
         case let string as String:
             Double(string.trimmingCharacters(in: .whitespacesAndNewlines))
         default:
