@@ -179,10 +179,21 @@ public enum ClaudeSourcePlanner {
                     self.step(.web, reason: .appAutoFallbackWeb, input: input),
                 ]
             case .cli:
+                #if os(macOS)
                 [
                     self.step(.web, reason: .cliAutoPreferredWeb, input: input),
                     self.step(.cli, reason: .cliAutoFallbackCLI, input: input),
                 ]
+                #else
+                // No Claude CLI PTY and a macOS-only web strategy on this platform, so OAuth
+                // (self-refreshing ~/.claude/.credentials.json) is the only viable auto source.
+                // Keep web/cli as ordered fallbacks for parity, but prefer OAuth first.
+                [
+                    self.step(.oauth, reason: .appAutoPreferredOAuth, input: input),
+                    self.step(.web, reason: .cliAutoPreferredWeb, input: input),
+                    self.step(.cli, reason: .cliAutoFallbackCLI, input: input),
+                ]
+                #endif
             }
         case .api:
             [self.step(.api, reason: .explicitSourceSelection, input: input)]

@@ -551,6 +551,19 @@ extension CodexBarCLI {
         if provider == .codex, sourceMode == .auto {
             return false
         }
+        #if !os(macOS)
+        if provider == .claude, sourceMode == .auto, let environment,
+           ClaudeOAuthPlanningAvailability.isAvailable(
+               runtime: .cli,
+               sourceMode: .auto,
+               environment: environment)
+        {
+            // On non-macOS, Claude auto prefers OAuth (self-refreshing ~/.claude/.credentials.json),
+            // which needs neither web support nor macOS. Only fall through to the web requirement
+            // when there are no usable OAuth credentials.
+            return false
+        }
+        #endif
         if provider == .opencodego {
             if sourceMode == .auto || settings?.opencodego?.cookieSource == .manual {
                 return false

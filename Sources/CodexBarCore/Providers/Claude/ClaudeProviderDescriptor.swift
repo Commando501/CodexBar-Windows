@@ -81,7 +81,13 @@ public enum ClaudeProviderDescriptor {
 
     private static func makePlanningInput(context: ProviderFetchContext) async -> ClaudeSourcePlanningInput {
         let webExtrasEnabled = context.settings?.claude?.webExtrasEnabled ?? false
+        #if os(macOS)
         let needsOAuthAvailability = context.runtime == .app && context.sourceMode == .auto
+        #else
+        // On non-macOS the CLI runtime also prefers OAuth in auto mode (there is no Claude CLI PTY
+        // and the web strategy is macOS-only), so compute OAuth availability for it too.
+        let needsOAuthAvailability = context.sourceMode == .auto
+        #endif
 
         return ClaudeSourcePlanningInput(
             runtime: context.runtime,
@@ -271,6 +277,26 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
         let strategy = ClaudeOAuthFetchStrategy()
         let nonInteractiveRecord = strategy.loadNonInteractiveCredentialRecord(environment: environment)
         let nonInteractiveCredentials = nonInteractiveRecord?.credentials
+
+        #if !os(macOS)
+        // No macOS Keychain and no Claude CLI here: the OAuth strategy is the only viable Claude
+        // source, and it is usable whenever ~/.claude/.credentials.json yields a record. Non-expired
+        // tokens work directly; expired tokens are self-refreshed in-process (and written back) as
+        // long as a rotating refresh token is present. Prefer OAuth over the macOS-only web strategy.
+        if let nonInteractiveCredentials {
+            if !nonInteractiveCredentials.isExpired {
+                return true
+            }
+            let refreshToken = nonInteractiveCredentials.refreshToken?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !refreshToken.isEmpty {
+                return true
+            }
+            // Expired with no refresh token: only usable when the user explicitly selects OAuth.
+            return sourceMode != .auto
+        }
+        return false
+        #else
         let hasRequiredScopeWithoutPrompt = nonInteractiveCredentials?.scopes.contains("user:profile") == true
         if hasRequiredScopeWithoutPrompt, nonInteractiveCredentials?.isExpired == false {
             return true
@@ -320,6 +346,7 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
             return false
         }
         return ClaudeOAuthCredentialsStore.hasClaudeKeychainCredentialsWithoutPrompt()
+        #endif
     }
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {

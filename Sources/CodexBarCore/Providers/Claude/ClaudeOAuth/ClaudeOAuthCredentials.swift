@@ -1140,10 +1140,19 @@ public enum ClaudeOAuthCredentialsStore {
 
         switch record.owner {
         case .claudeCLI:
+            #if os(macOS)
             self.log.info(
                 "Claude OAuth credentials expired; delegating refresh to Claude CLI",
                 metadata: expiryMetadata)
             throw ClaudeOAuthCredentialsError.refreshDelegatedToClaudeCLI
+            #else
+            // There is no Claude CLI / PTY on this platform, so we cannot delegate the refresh.
+            // Self-refresh the CLI-owned token directly (same endpoint Claude Code uses) and write
+            // the rotated tokens back to ~/.claude/.credentials.json so Claude Code stays in sync.
+            self.log.info(
+                "Claude OAuth credentials expired; self-refreshing CLI-owned token (no Claude CLI on this platform)",
+                metadata: expiryMetadata)
+            #endif
         case .environment:
             self.log.warning("Environment OAuth token expired and cannot be auto-refreshed")
             throw ClaudeOAuthCredentialsError.noRefreshToken
@@ -1165,6 +1174,13 @@ public enum ClaudeOAuthCredentialsStore {
                 existingRateLimitTier: credentials.rateLimitTier,
                 existingSubscriptionType: credentials.subscriptionType)
             self.log.info("Token refresh successful, expires in \(refreshed.expiresIn ?? 0) seconds")
+            #if !os(macOS)
+            // Only CLI-owned credentials are read from ~/.claude/.credentials.json; persist the
+            // rotated tokens back so Claude Code keeps working with the same (rotated) refresh token.
+            if record.owner == .claudeCLI {
+                self.writeRefreshedTokensToClaudeCredentialsFile(refreshed)
+            }
+            #endif
             return refreshed
         } catch {
             self.log.error("Token refresh failed: \(error.localizedDescription)")
@@ -2066,6 +2082,56 @@ public enum ClaudeOAuthCredentialsStore {
         let home = FileManager.default.homeDirectoryForCurrentUser
         return home.appendingPathComponent(self.credentialsPath)
     }
+
+    #if !os(macOS)
+    /// Non-macOS write-back after self-refreshing Claude-CLI-owned credentials.
+    ///
+    /// Updates ONLY the rotating token fields (`accessToken` / `refreshToken` / `expiresAt`) inside
+    /// the `claudeAiOauth` section of `~/.claude/.credentials.json`, preserving every other key and
+    /// section verbatim. The whole file is parsed with `JSONSerialization` and re-serialized — we
+    /// never re-encode via a typed struct, which would silently drop unknown keys/sections (e.g.
+    /// `organizationUuid`, `mcpOAuth`). Because refresh tokens rotate on every refresh, persisting
+    /// them keeps Claude Code authenticated with the same credentials. Failures are non-fatal: the
+    /// caller still returns the freshly refreshed in-memory credentials for this fetch.
+    private static func writeRefreshedTokensToClaudeCredentialsFile(_ credentials: ClaudeOAuthCredentials) {
+        let url = self.credentialsFileURL()
+        do {
+            let original = try Data(contentsOf: url)
+            guard var root = try JSONSerialization.jsonObject(with: original) as? [String: Any] else {
+                self.log.error("Claude credentials write-back skipped: file root is not a JSON object")
+                return
+            }
+            guard var oauth = root["claudeAiOauth"] as? [String: Any] else {
+                self.log.error("Claude credentials write-back skipped: missing claudeAiOauth section")
+                return
+            }
+
+            oauth["accessToken"] = credentials.accessToken
+            if let refreshToken = credentials.refreshToken, !refreshToken.isEmpty {
+                oauth["refreshToken"] = refreshToken
+            }
+            if let expiresAt = credentials.expiresAt {
+                // Claude Code stores the expiry as epoch milliseconds.
+                oauth["expiresAt"] = Int(expiresAt.timeIntervalSince1970 * 1000)
+            }
+            root["claudeAiOauth"] = oauth
+
+            guard JSONSerialization.isValidJSONObject(root) else {
+                self.log.error("Claude credentials write-back skipped: updated object is not valid JSON")
+                return
+            }
+            let updated = try JSONSerialization.data(withJSONObject: root)
+            // Atomic replace: Foundation writes a sibling temp file and renames it over the
+            // destination, so the live credentials file is never left partially written.
+            // TODO(windows-security): tighten the file ACL to the current user (the macOS/Linux
+            // paths enforce 0600); the file already lives under the user's profile directory.
+            try updated.write(to: url, options: [.atomic])
+            self.log.info("Claude credentials write-back: rotated tokens persisted to credentials file")
+        } catch {
+            self.log.error("Claude credentials write-back failed (non-fatal): \(error.localizedDescription)")
+        }
+    }
+    #endif
 }
 
 // swiftlint:enable type_body_length
