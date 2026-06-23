@@ -76,7 +76,7 @@ let package = Package(
             .target(
                 name: "CodexBarCore",
                 dependencies: [
-                    .target(name: "CSQLite3", condition: .when(platforms: [.linux])),
+                    .target(name: "CSQLite3", condition: .when(platforms: [.linux, .windows])),
                     .product(name: "Crypto", package: "swift-crypto"),
                     .product(name: "Logging", package: "swift-log"),
                     .product(name: "SweetCookieKit", package: "SweetCookieKit"),

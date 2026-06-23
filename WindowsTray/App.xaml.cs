@@ -15,22 +15,33 @@ public partial class App : Application
 
     private readonly UsageViewModel _usageVm = new();
     private readonly ConfigService _config = new();
+    private readonly UiSettings _ui = UiSettings.Load();
     private SettingsWindow? _settingsWindow;
+    private UsageWindow? _usageWindow;
     private bool _refreshing;
 
     private void OnStartup(object sender, StartupEventArgs e)
     {
         var popup = new UsagePopup { DataContext = _usageVm };
+        _usageWindow = new UsageWindow(popup, _ui);
 
         _trayIcon = new TaskbarIcon
         {
             IconSource = TrayIconFactory.CreateDefault(),
             ToolTipText = "CodexBar — starting…",
             ContextMenu = BuildContextMenu(),
-            TrayPopup = popup,
         };
-        // Refresh usage when the user opens the popover (left-click).
-        _trayIcon.TrayPopupOpen += (_, _) => _ = RefreshUsageAsync();
+        // Left-click toggles our own draggable window; refresh as it opens.
+        _trayIcon.TrayLeftMouseUp += (_, _) =>
+        {
+            if (_usageWindow is null) return;
+            var willShow = !_usageWindow.IsVisible;
+            _usageWindow.ToggleFromTray();
+            if (willShow && _usageWindow.IsVisible) _ = RefreshUsageAsync();
+        };
+
+        // Restore a pinned panel so it's there as soon as the app launches.
+        if (_ui.AlwaysOnScreen) _usageWindow.ShowPanel();
 
         _ = StartEngineAsync();
     }
@@ -50,6 +61,26 @@ public partial class App : Application
         var settings = new MenuItem { Header = "Settings…" };
         settings.Click += (_, _) => OpenSettings();
         menu.Items.Add(settings);
+
+        var alwaysOnScreen = new MenuItem
+        {
+            Header = "Always on screen",
+            IsCheckable = true,
+            IsChecked = _ui.AlwaysOnScreen,
+        };
+        alwaysOnScreen.Click += (_, _) =>
+        {
+            if (_usageWindow is null) return;
+            _usageWindow.AlwaysOnScreen = alwaysOnScreen.IsChecked;
+            // Pinning brings the panel up (and keeps it up); unpinning leaves it
+            // visible but it will now dismiss on click-away like a normal popover.
+            if (alwaysOnScreen.IsChecked)
+            {
+                _usageWindow.ShowPanel();
+                _ = RefreshUsageAsync();
+            }
+        };
+        menu.Items.Add(alwaysOnScreen);
 
         var startup = new MenuItem { Header = "Start with Windows", IsCheckable = true };
         try { startup.IsChecked = StartupRegistration.IsEnabled(); } catch { /* registry unavailable */ }
@@ -186,6 +217,7 @@ public partial class App : Application
     private void OnExit(object sender, ExitEventArgs e)
     {
         _refreshTimer?.Stop();
+        _usageWindow?.Close();
         _client?.Dispose();
         _serve?.Dispose();
         _trayIcon?.Dispose();

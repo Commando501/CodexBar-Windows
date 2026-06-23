@@ -15,5 +15,9 @@ REM Make the locally built static sqlite3.lib discoverable by the linker
 REM (SweetCookieKit + Chromium cookie importers link `sqlite3`). Build it once
 REM with Scripts\win-build-sqlite.cmd.
 set "LIB=%~dp0..\ThirdParty\sqlite-win;%LIB%"
+REM Make the bundled sqlite3.h discoverable by the Clang importer so the
+REM CSQLite3 system module (used by the Cursor/vscdb readers) can resolve
+REM `#include <sqlite3.h>` on Windows, where SQLite is not a system header.
+set "INCLUDE=%~dp0..\ThirdParty\sqlite-win;%INCLUDE%"
 swift %*
 endlocal

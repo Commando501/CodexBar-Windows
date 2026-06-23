@@ -62,15 +62,18 @@ public static class AuthClassifier
     // Providers that accept a direct API key (ProviderConfigEnvironment.supportsAPIKeyOverride).
     private static readonly HashSet<string> ApiKeyIds = new(StringComparer.OrdinalIgnoreCase)
     {
-        "amp", "openai", "azureopenai", "claude", "zai", "minimax", "alibaba", "kilo", "synthetic",
+        "amp", "openai", "azureopenai", "zai", "minimax", "alibaba", "kilo", "synthetic",
         "openrouter", "elevenlabs", "moonshot", "kimi", "ollama", "venice", "deepgram", "groq",
         "llmproxy", "litellm", "chutes", "poe", "copilot", "kimik2", "warp", "codebuff", "crof", "doubao",
     };
 
     // Providers that work on Windows today via OAuth or local CLI/files (no key field).
+    // Claude authenticates via the OAuth credentials file (~/.claude/.credentials.json) and
+    // self-refreshes on Windows, so it needs no API key here (its Admin API key remains
+    // settable via `codexbar config set-api-key` for advanced users).
     private static readonly HashSet<string> OAuthOrCliIds = new(StringComparer.OrdinalIgnoreCase)
     {
-        "codex", "gemini", "vertexai", "kiro",
+        "codex", "claude", "gemini", "vertexai", "kiro",
     };
 
     public static AuthKind Classify(string id)

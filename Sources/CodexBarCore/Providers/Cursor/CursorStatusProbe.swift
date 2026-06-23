@@ -5,12 +5,23 @@ import FoundationNetworking
 import SweetCookieKit
 #if canImport(SQLite3)
 import SQLite3
+#elseif canImport(CSQLite3)
+import CSQLite3
 #endif
 
-#if os(macOS)
+#if os(macOS) || os(Windows)
 
-private let cursorCookieImportOrder: BrowserCookieImportOrder =
-    ProviderDefaults.metadata[.cursor]?.browserCookieOrder ?? Browser.defaultImportOrder
+private let cursorCookieImportOrder: BrowserCookieImportOrder = {
+    #if os(macOS)
+    return ProviderDefaults.metadata[.cursor]?.browserCookieOrder ?? Browser.defaultImportOrder
+    #else
+    // No browser cookie auto-import on Windows yet (SweetCookieKit cookie decryption is macOS-only),
+    // so there is no meaningful browser order — auth comes from the manual cookie or Cursor.app's vscdb.
+    return ProviderDefaults.metadata[.cursor]?.browserCookieOrder ?? []
+    #endif
+}()
+
+#if os(macOS)
 
 // MARK: - Cursor Cookie Importer
 
@@ -186,6 +197,8 @@ public enum CursorCookieImporter {
         }
     }
 }
+
+#endif // os(macOS) — CursorCookieImporter (browser auto-import)
 
 // MARK: - Cursor API Models
 
@@ -409,8 +422,15 @@ protocol CursorAppAuthSessionProviding: Sendable {
 
 struct CursorAppAuthStore: CursorAppAuthSessionProviding {
     private static let defaultDBPath: String = {
+        #if os(Windows)
+        // Cursor desktop on Windows stores its global state under %APPDATA%\Cursor.
+        let appData = ProcessInfo.processInfo.environment["APPDATA"]
+            ?? "\(NSHomeDirectory())\\AppData\\Roaming"
+        return "\(appData)\\Cursor\\User\\globalStorage\\state.vscdb"
+        #else
         let home = NSHomeDirectory()
         return "\(home)/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+        #endif
     }()
 
     private let dbPath: String
@@ -711,9 +731,14 @@ public enum CursorStatusProbeError: LocalizedError, Sendable {
         case let .parseFailed(msg):
             "Could not parse Cursor usage: \(msg)"
         case .noSessionCookie:
+            #if os(macOS)
             "No Cursor session found. \(Self.safariFullDiskAccessHint) "
                 + "Please log in to cursor.com in \(cursorCookieImportOrder.loginHint). "
                 + "You can also sign in to Cursor from the CodexBar menu (Add / switch account)."
+            #else
+            "No Cursor session found. Open Cursor and sign in, or paste a Cursor session cookie "
+                + "(WorkosCursorSessionToken=…) in the provider settings."
+            #endif
         }
     }
 }
@@ -927,6 +952,9 @@ public struct CursorStatusProbe: Sendable {
             }
         }
 
+        // Browser cookie auto-import is macOS-only (SweetCookieKit cookie decryption is not ported to
+        // Windows yet). On other platforms we skip straight to stored sessions / Cursor.app local auth.
+        #if os(macOS)
         // Try each browser in order. The first browser that *has* session cookie names is not always valid
         // (e.g. stale Chrome tokens); keep trying until the API accepts a session or we run out of browsers.
         let browserCandidates = self.browserCookieImportOrder.cookieImportCandidates(using: self.browserDetection)
@@ -965,6 +993,7 @@ public struct CursorStatusProbe: Sendable {
         case let .exhausted(error):
             firstRecoverableError = error ?? firstRecoverableError
         }
+        #endif
 
         // Fall back to stored session cookies (from "Add Account" login flow)
         if allowCachedSessions {
@@ -1022,6 +1051,7 @@ public struct CursorStatusProbe: Sendable {
         throw CursorStatusProbeError.noSessionCookie
     }
 
+    #if os(macOS)
     enum ImportedSessionFetchOutcome {
         case succeeded(CursorStatusSnapshot)
         case tryNextBrowser
@@ -1104,6 +1134,7 @@ public struct CursorStatusProbe: Sendable {
             return .failed(.networkError(error.localizedDescription))
         }
     }
+    #endif // os(macOS) — browser-scan helpers
 
     private func fetchWithCookieHeader(
         _ cookieHeader: String,
