@@ -26,7 +26,16 @@ public partial class SettingsWindow : Window
         SessionNotifyCheck.IsChecked = _ui.SessionQuotaNotificationsEnabled;
         WarningNotifyCheck.IsChecked = _ui.QuotaWarningNotificationsEnabled;
         ThresholdsBox.Text = string.Join(", ", _ui.QuotaWarningThresholds);
+        AutoUpdateCheck.IsChecked = _ui.AutomaticUpdateChecks;
+        VersionText.Text = $"CodexBar {AppVersion.DisplayString}";
         _loadingNotificationsUi = false;
+    }
+
+    private void OnUpdateToggleChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loadingNotificationsUi) return;
+        _ui.AutomaticUpdateChecks = AutoUpdateCheck.IsChecked == true;
+        _ui.Save();
     }
 
     private void OnNotificationToggleChanged(object sender, RoutedEventArgs e)

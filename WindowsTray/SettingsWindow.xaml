@@ -87,6 +87,16 @@
                 </StackPanel>
             </Border>
 
+            <TextBlock Text="Updates" FontSize="16" FontWeight="Bold" Margin="0,14,0,0" />
+            <Border Background="{StaticResource CardBg}" CornerRadius="8" Padding="10,8" Margin="0,6,0,0">
+                <StackPanel>
+                    <CheckBox x:Name="AutoUpdateCheck" Content="Automatically check for updates"
+                              Foreground="{StaticResource TextDim}" Click="OnUpdateToggleChanged" />
+                    <TextBlock x:Name="VersionText" Foreground="{StaticResource TextDim}" FontSize="10"
+                               Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+
             <TextBlock Text="Providers" FontSize="16" FontWeight="Bold" Margin="0,14,0,0" />
             <TextBlock Foreground="{StaticResource TextDim}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
                        Text="Toggle providers and set API keys. Providers marked OAuth/CLI sign in automatically; cookie-based providers aren't fully supported on Windows yet." />

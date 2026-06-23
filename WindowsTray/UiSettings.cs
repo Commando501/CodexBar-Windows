@@ -22,6 +22,11 @@ public sealed class UiSettings
     public bool QuotaWarningNotificationsEnabled { get; set; } = true;
     public List<int> QuotaWarningThresholds { get; set; } = new() { 50, 20 };
 
+    // Update checks. Default on, like Sparkle's automatic checks. LastNotified...
+    // suppresses a repeat toast for the same release across periodic checks.
+    public bool AutomaticUpdateChecks { get; set; } = true;
+    public string? LastNotifiedUpdateTag { get; set; }
+
     private static string FilePath
     {
         get

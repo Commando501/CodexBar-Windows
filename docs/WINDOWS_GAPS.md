@@ -37,7 +37,7 @@ From `Package.swift`, these targets/dependencies build only on macOS:
 | WidgetKit widgets (Usage/History/Metric/Burn-Down) | `CodexBarWidget` + `WidgetExtension/` | Partial — pinnable **desktop widget windows** in the tray (`WindowsTray/Widgets/`): Usage, Cost (session/today/30-day), Cost-History mini-chart, session/weekly **Burn-Down** projection charts, and sampled session/weekly **Usage-History** line charts. The tray samples utilization in-process on each `/usage` poll (`UsageHistoryStore`, the lean equivalent of macOS `PlanUtilizationHistoryStore`) and persists to `history.json`. Remaining gap: OS Widgets-Board host (would need MSIX + Windows App SDK) |
 | Claude usage watchdog helper | `CodexBarClaudeWatchdog` | Missing |
 | Claude web probe helper | `CodexBarClaudeWebProbe` | Missing |
-| Auto-update | `Sparkle` + `appcast.xml` | No updater in the tray |
+| Auto-update | `Sparkle` + `appcast.xml` | Partial — in-app **update notifier** (`WindowsTray/Update/`) checks GitHub Releases daily, toasts when a newer version exists, and surfaces a "Download update…" tray item linking to the release. No silent download/install yet (portable-zip model; could grow to Velopack) |
 | Global keyboard shortcuts | `KeyboardShortcuts` dep | Missing |
 | Particle / visual effects | `Vortex` dep | Missing |
 
@@ -148,9 +148,10 @@ the menu items **Refresh**, **Settings…**, **Always on screen**,
   is English-only.
 - **Diagnostics UI** — `codexbar diagnose` exists, but the Mac diagnostics/debug
   panes are not surfaced in the tray.
-- **Packaging / signing / update pipeline** — Windows packaging exists
-  (`build.ps1`, `Scripts/win-package.ps1`) but there is no signed-installer or
-  auto-update pipeline equivalent to the macOS appcast.
+- **Packaging / signing** — Windows packaging exists (`build.ps1`,
+  `Scripts/win-package.ps1`, now version-stamped from `version.env`) but there is
+  no signed installer. Update *notification* now exists (see §1); silent
+  download/install equivalent to the macOS appcast does not.
 
 ---
 

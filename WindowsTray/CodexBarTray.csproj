@@ -9,6 +9,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>CodexBarTray</AssemblyName>
     <RootNamespace>CodexBarTray</RootNamespace>
+    <!-- Keep in sync with version.env (MARKETING_VERSION). win-package.ps1 overrides
+         this with -p:Version at package time. -->
+    <Version>0.37.3</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- Single-instance, no console window. -->
     <UseWindowsForms>false</UseWindowsForms>
