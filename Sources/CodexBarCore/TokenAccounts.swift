@@ -100,15 +100,24 @@ public struct FileTokenAccountStore: ProviderTokenAccountStoring, @unchecked Sen
         var result: [UsageProvider: ProviderTokenAccountData] = [:]
         for (key, value) in decoded.providers {
             guard let provider = UsageProvider(rawValue: key) else { continue }
+            #if os(Windows)
+            result[provider] = value.mappingTokens(WindowsConfigSecretCodec.reveal)
+            #else
             result[provider] = value
+            #endif
         }
         return result
     }
 
     public func storeAccounts(_ accounts: [UsageProvider: ProviderTokenAccountData]) throws {
+        #if os(Windows)
+        let stored = accounts.mapValues { $0.mappingTokens(WindowsConfigSecretCodec.protect) }
+        #else
+        let stored = accounts
+        #endif
         let payload = ProviderTokenAccountsFile(
             version: 1,
-            providers: Dictionary(uniqueKeysWithValues: accounts.map { ($0.key.rawValue, $0.value) }))
+            providers: Dictionary(uniqueKeysWithValues: stored.map { ($0.key.rawValue, $0.value) }))
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(payload)

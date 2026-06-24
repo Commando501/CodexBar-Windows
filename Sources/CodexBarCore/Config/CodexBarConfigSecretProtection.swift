@@ -34,6 +34,26 @@ enum WindowsConfigSecretCodec {
     }
 }
 
+extension ProviderTokenAccountData {
+    /// A copy with each account's secret `token` passed through `transform`
+    /// (all other fields preserved).
+    func mappingTokens(_ transform: (String?) -> String?) -> ProviderTokenAccountData {
+        ProviderTokenAccountData(
+            version: self.version,
+            accounts: self.accounts.map { account in
+                ProviderTokenAccount(
+                    id: account.id,
+                    label: account.label,
+                    token: transform(account.token) ?? account.token,
+                    addedAt: account.addedAt,
+                    lastUsed: account.lastUsed,
+                    externalIdentifier: account.externalIdentifier,
+                    organizationID: account.organizationID)
+            },
+            activeIndex: self.activeIndex)
+    }
+}
+
 extension CodexBarConfig {
     /// A copy with every secret field DPAPI-encrypted, ready to write to disk.
     func protectingSecretsForStorage() -> CodexBarConfig {
@@ -52,22 +72,7 @@ extension CodexBarConfig {
             updated.apiKey = transform(provider.apiKey)
             updated.secretKey = transform(provider.secretKey)
             updated.cookieHeader = transform(provider.cookieHeader)
-            if let accounts = provider.tokenAccounts {
-                let mapped = accounts.accounts.map { account in
-                    ProviderTokenAccount(
-                        id: account.id,
-                        label: account.label,
-                        token: transform(account.token) ?? account.token,
-                        addedAt: account.addedAt,
-                        lastUsed: account.lastUsed,
-                        externalIdentifier: account.externalIdentifier,
-                        organizationID: account.organizationID)
-                }
-                updated.tokenAccounts = ProviderTokenAccountData(
-                    version: accounts.version,
-                    accounts: mapped,
-                    activeIndex: accounts.activeIndex)
-            }
+            updated.tokenAccounts = provider.tokenAccounts?.mappingTokens(transform)
             return updated
         }
         return copy
