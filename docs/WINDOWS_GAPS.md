@@ -3,7 +3,7 @@ summary: "Inventory of CodexBar features not yet converted/working on Windows, w
 read_when:
   - Planning Windows port work or prioritizing compatibility gaps
   - Triaging why a provider/feature behaves differently on Windows
-last_reviewed: 2026-06-23
+last_reviewed: 2026-06-24
 ---
 
 # Windows Compatibility Gaps
@@ -55,9 +55,18 @@ headless engine loses them on Windows:
   Edge/Brave/Firefox/older-Chrome work. No automatic re-import on expiry yet.
 - **macOS Keychain** — `KeychainAccessGate`, `KeychainCacheStore`,
   `KeychainMigration`, `KeychainPromptCoordinator`, `KeychainNoUIQuery`, and the
-  `security` CLI reader for Claude OAuth. On Windows tokens fall back to a
-  **plaintext file** (`TokenAccounts` file store) — no DPAPI / Credential Manager
-  encryption. **Security gap.**
+  `security` CLI reader for Claude OAuth. ✅ *Windows secret cache implemented*:
+  `KeychainCacheStore` (the cookie-cache + OAuth-token-cache layer that
+  `CookieHeaderCache` and `ClaudeOAuthCredentials` use) now has a **DPAPI-encrypted
+  file backend** on Windows (`WindowsSecretStore.swift`, `CryptProtectData`/
+  `CryptUnprotectData`, current-user scope + app entropy) at
+  `%LOCALAPPDATA%\CodexBar\SecretCache\`. Previously every Windows branch was a
+  no-op, so this both restores caching and encrypts those secrets at rest.
+  Remaining: the user-entered secrets in `~/.codexbar/config.json` (`apiKey`,
+  `cookieHeader`, `tokenAccounts`) are still **plaintext** — but that matches macOS,
+  where those same fields are plaintext in config.json and only the Keychain cache is
+  protected. The `security`-CLI Claude OAuth bootstrap and `KeychainMigration` remain
+  macOS-only.
 - **WebKit dashboard scraping** — `OpenAIWeb/*` (OpenAI credits/usage dashboard),
   `ClaudeWeb`, the Codex web dashboard strategy, Copilot budget web fetch,
   `WebKit/WebKitTeardown`. All macOS-only (no WebView2 replacement yet).
@@ -169,8 +178,10 @@ the menu items **Refresh**, **Settings…**, **Always on screen**,
 
 1. **Browser cookie import** on Windows — unlocks ~12+ providers (Broken +
    Degraded cookie cases).
-2. **Secure token storage** (DPAPI / Windows Credential Manager) replacing the
-   plaintext `TokenAccounts` file.
+2. ✅ **Secure token storage** — `KeychainCacheStore` now has a DPAPI-encrypted
+   Windows backend for the cookie/OAuth cache. Remaining (optional): also encrypt the
+   `apiKey`/`cookieHeader`/`tokenAccounts` fields in `~/.codexbar/config.json`, which
+   are still plaintext (as on macOS).
 3. **Interactive login** (PTY replacement) for Claude / Codex. (Antigravity now has
    a browser OAuth login via `codexbar login`; still needs tray UI wiring.)
 4. **WebKit dashboard scraping** replacement (e.g. WebView2) for OpenAI / Claude /

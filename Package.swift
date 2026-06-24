@@ -18,6 +18,11 @@ let sqlite3LinkerSettings: [LinkerSetting] = if let sqlite3LibDir, !sqlite3LibDi
     []
 }
 
+// CodexBarCore links Crypt32 on Windows for DPAPI (CryptProtectData/CryptUnprotectData),
+// used by WindowsSecretStore to encrypt the secret cache at rest.
+let coreLinkerSettings: [LinkerSetting] = sqlite3LinkerSettings
+    + [.linkedLibrary("crypt32", .when(platforms: [.windows]))]
+
 let package = Package(
     name: "CodexBar",
     defaultLocalization: "en",
@@ -84,7 +89,7 @@ let package = Package(
                 swiftSettings: [
                     .enableUpcomingFeature("StrictConcurrency"),
                 ],
-                linkerSettings: sqlite3LinkerSettings),
+                linkerSettings: coreLinkerSettings),
             .executableTarget(
                 name: "CodexBarCLI",
                 dependencies: [

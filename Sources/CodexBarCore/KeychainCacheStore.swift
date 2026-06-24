@@ -99,6 +99,25 @@ public enum KeychainCacheStore {
         default:
             return self.loadResultForKeychainReadFailure(status: status, key: key)
         }
+        #elseif os(Windows)
+        switch WindowsSecretStore.load(service: self.serviceName, account: key.account) {
+        case .missing:
+            return .missing
+        case .invalid:
+            self.log.error("Secret cache item invalid (\(key.account))")
+            return .invalid
+        case let .found(data):
+            guard !data.isEmpty else {
+                self.log.error("Secret cache item was empty (\(key.account))")
+                return .invalid
+            }
+            let decoder = Self.makeDecoder()
+            guard let decoded = try? decoder.decode(Entry.self, from: data) else {
+                self.log.error("Failed to decode secret cache (\(key.account))")
+                return .invalid
+            }
+            return .found(decoded)
+        }
         #else
         return .missing
         #endif
@@ -158,6 +177,13 @@ public enum KeychainCacheStore {
             self.log.error("Keychain cache add failed (\(key.account)): \(addStatus)")
         }
         return addStatus == errSecSuccess
+        #elseif os(Windows)
+        let encoder = Self.makeEncoder()
+        guard let data = try? encoder.encode(entry) else {
+            self.log.error("Failed to encode secret cache (\(key.account))")
+            return false
+        }
+        return WindowsSecretStore.store(service: self.serviceName, account: key.account, data: data)
         #else
         return false
         #endif
@@ -186,6 +212,16 @@ public enum KeychainCacheStore {
         ]
         KeychainNoUIQuery.apply(to: &query)
         return self.clearResultForKeychainDeleteStatus(SecItemDelete(query as CFDictionary), key: key)
+        #elseif os(Windows)
+        switch WindowsSecretStore.clear(service: self.serviceName, account: key.account) {
+        case .removed:
+            return .removed
+        case .missing:
+            return .missing
+        case .failed:
+            self.log.error("Secret cache delete failed (\(key.account))")
+            return .failed
+        }
         #else
         return .failed
         #endif
@@ -222,6 +258,13 @@ public enum KeychainCacheStore {
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         return self.keysResultForKeychainStatus(status, category: category, result: result)
+        #elseif os(Windows)
+        guard let accounts = WindowsSecretStore.accounts(service: self.serviceName) else {
+            self.log.error("Secret cache key listing failed (\(category))")
+            return .failed
+        }
+        let keys = accounts.compactMap { self.key(fromAccount: $0, category: category) }
+        return .found(keys)
         #else
         return .failed
         #endif
