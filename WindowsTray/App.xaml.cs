@@ -151,7 +151,13 @@ public partial class App : Application
 
         var widgets = new MenuItem { Header = "Widgets" };
         // Rebuild the provider list each time so it reflects the latest refresh.
-        widgets.SubmenuOpened += (_, _) => PopulateWidgetsMenu(widgets);
+        // SubmenuOpened bubbles, so it also fires when a child submenu opens
+        // (e.g. hovering "Usage"). Guard on OriginalSource: rebuilding then would
+        // clear the item under the cursor and collapse the whole menu.
+        widgets.SubmenuOpened += (_, e) =>
+        {
+            if (ReferenceEquals(e.OriginalSource, widgets)) PopulateWidgetsMenu(widgets);
+        };
         widgets.Items.Add(new MenuItem { Header = "Loading…", IsEnabled = false });
         menu.Items.Add(widgets);
 

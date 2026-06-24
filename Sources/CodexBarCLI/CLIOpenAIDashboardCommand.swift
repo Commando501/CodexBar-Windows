@@ -19,7 +19,6 @@ extension CodexBarCLI {
                     message: "Could not read input file: \(path)",
                     output: output,
                     kind: .args)
-                return
             }
             raw = data
         } else if values.flags.contains("stdin") {
@@ -30,7 +29,6 @@ extension CodexBarCLI {
                 message: "Provide the scrape payload with --stdin or --input <path>.",
                 output: output,
                 kind: .args)
-            return
         }
 
         let payload: OpenAIDashboardScrapePayload
@@ -42,7 +40,6 @@ extension CodexBarCLI {
                 message: "Invalid scrape payload JSON: \(error.localizedDescription)",
                 output: output,
                 kind: .args)
-            return
         }
 
         do {
