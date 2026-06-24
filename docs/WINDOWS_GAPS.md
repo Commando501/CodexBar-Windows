@@ -62,11 +62,15 @@ headless engine loses them on Windows:
   `CryptUnprotectData`, current-user scope + app entropy) at
   `%LOCALAPPDATA%\CodexBar\SecretCache\`. Previously every Windows branch was a
   no-op, so this both restores caching and encrypts those secrets at rest.
-  Remaining: the user-entered secrets in `~/.codexbar/config.json` (`apiKey`,
-  `cookieHeader`, `tokenAccounts`) are still **plaintext** — but that matches macOS,
-  where those same fields are plaintext in config.json and only the Keychain cache is
-  protected. The `security`-CLI Claude OAuth bootstrap and `KeychainMigration` remain
-  macOS-only.
+  ✅ *Config secrets also encrypted*: the user-entered secrets in
+  `~/.codexbar/config.json` (`apiKey`, `secretKey`, `cookieHeader`, and
+  `tokenAccounts[].token`) are now DPAPI-encrypted at rest on Windows
+  (`CodexBarConfigSecretProtection.swift`, `dpapi:v1:` marker, encrypt-on-save /
+  decrypt-on-load in `CodexBarConfigStore`). Plaintext/hand-written configs still load
+  and are migrated to ciphertext on the next save. This is actually *stronger* than
+  macOS, where those config.json fields remain plaintext. Remaining: the separate
+  `FileTokenAccountStore` file is not yet covered; the `security`-CLI Claude OAuth
+  bootstrap and `KeychainMigration` remain macOS-only.
 - **WebKit dashboard scraping** — `OpenAIWeb/*` (OpenAI credits/usage dashboard),
   `ClaudeWeb`, the Codex web dashboard strategy, Copilot budget web fetch,
   `WebKit/WebKitTeardown`. All macOS-only (no WebView2 replacement yet).
@@ -178,10 +182,10 @@ the menu items **Refresh**, **Settings…**, **Always on screen**,
 
 1. **Browser cookie import** on Windows — unlocks ~12+ providers (Broken +
    Degraded cookie cases).
-2. ✅ **Secure token storage** — `KeychainCacheStore` now has a DPAPI-encrypted
-   Windows backend for the cookie/OAuth cache. Remaining (optional): also encrypt the
-   `apiKey`/`cookieHeader`/`tokenAccounts` fields in `~/.codexbar/config.json`, which
-   are still plaintext (as on macOS).
+2. ✅ **Secure token storage** — DPAPI now encrypts both the `KeychainCacheStore`
+   cookie/OAuth cache and the `config.json` secret fields (`apiKey`/`secretKey`/
+   `cookieHeader`/`tokenAccounts[].token`) at rest on Windows. Remaining (optional):
+   the separate `FileTokenAccountStore` file.
 3. **Interactive login** (PTY replacement) for Claude / Codex. (Antigravity now has
    a browser OAuth login via `codexbar login`; still needs tray UI wiring.)
 4. **WebKit dashboard scraping** replacement (e.g. WebView2) for OpenAI / Claude /
