@@ -35,7 +35,11 @@ public struct CodexBarConfigStore: @unchecked Sendable {
         let decoder = JSONDecoder()
         do {
             let decoded = try decoder.decode(CodexBarConfig.self, from: data)
+            #if os(Windows)
+            return decoded.revealingSecretsFromStorage().normalized()
+            #else
             return decoded.normalized()
+            #endif
         } catch {
             throw CodexBarConfigStoreError.decodeFailed(error.localizedDescription)
         }
@@ -51,7 +55,10 @@ public struct CodexBarConfigStore: @unchecked Sendable {
     }
 
     public func save(_ config: CodexBarConfig) throws {
-        let normalized = config.normalized()
+        var normalized = config.normalized()
+        #if os(Windows)
+        normalized = normalized.protectingSecretsForStorage()
+        #endif
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data: Data

@@ -3,7 +3,7 @@ summary: "Inventory of CodexBar features not yet converted/working on Windows, w
 read_when:
   - Planning Windows port work or prioritizing compatibility gaps
   - Triaging why a provider/feature behaves differently on Windows
-last_reviewed: 2026-06-23
+last_reviewed: 2026-06-24
 ---
 
 # Windows Compatibility Gaps
@@ -55,12 +55,39 @@ headless engine loses them on Windows:
   Edge/Brave/Firefox/older-Chrome work. No automatic re-import on expiry yet.
 - **macOS Keychain** — `KeychainAccessGate`, `KeychainCacheStore`,
   `KeychainMigration`, `KeychainPromptCoordinator`, `KeychainNoUIQuery`, and the
-  `security` CLI reader for Claude OAuth. On Windows tokens fall back to a
-  **plaintext file** (`TokenAccounts` file store) — no DPAPI / Credential Manager
-  encryption. **Security gap.**
+  `security` CLI reader for Claude OAuth. ✅ *Windows secret cache implemented*:
+  `KeychainCacheStore` (the cookie-cache + OAuth-token-cache layer that
+  `CookieHeaderCache` and `ClaudeOAuthCredentials` use) now has a **DPAPI-encrypted
+  file backend** on Windows (`WindowsSecretStore.swift`, `CryptProtectData`/
+  `CryptUnprotectData`, current-user scope + app entropy) at
+  `%LOCALAPPDATA%\CodexBar\SecretCache\`. Previously every Windows branch was a
+  no-op, so this both restores caching and encrypts those secrets at rest.
+  ✅ *Config secrets also encrypted*: the user-entered secrets in
+  `~/.codexbar/config.json` (`apiKey`, `secretKey`, `cookieHeader`, and
+  `tokenAccounts[].token`) are now DPAPI-encrypted at rest on Windows
+  (`CodexBarConfigSecretProtection.swift`, `dpapi:v1:` marker, encrypt-on-save /
+  decrypt-on-load in `CodexBarConfigStore`). The other CodexBar-owned secret files are
+  encrypted the same way: `FileTokenAccountStore` (`token-accounts.json`) per-`token`,
+  and the Antigravity `oauth_creds.json` whole-body envelope. Plaintext/hand-written
+  files still load and are migrated to ciphertext on the next save. This is actually
+  *stronger* than macOS, where those fields remain plaintext. Intentionally left
+  plaintext: Codex's `~/.codex/auth.json` and Claude's `~/.claude/.credentials.json`
+  are shared-format files owned by those external CLIs, so re-encrypting them would
+  break interop. Remaining: the `security`-CLI Claude OAuth bootstrap and
+  `KeychainMigration` are macOS-only, and the token files get no Windows ACL hardening
+  yet (DPAPI is the at-rest protection; files still sit under the user profile with
+  default ACLs).
 - **WebKit dashboard scraping** — `OpenAIWeb/*` (OpenAI credits/usage dashboard),
   `ClaudeWeb`, the Codex web dashboard strategy, Copilot budget web fetch,
-  `WebKit/WebKitTeardown`. All macOS-only (no WebView2 replacement yet).
+  `WebKit/WebKitTeardown`. The macOS app drives these in a `WKWebView`. 🚧 *WebView2
+  port in progress (OpenAI dashboard first)*: the parser (`OpenAIDashboardParser`) is
+  already cross-platform, so **Phase 1 landed** — a platform-agnostic
+  `OpenAIDashboardScrapeIngest` + `codexbar openai-dashboard ingest` verb turn a
+  scrape payload into an `OpenAIDashboardSnapshot` on Windows, reusing the parser (no
+  C# reimplementation). Remaining: Phase 2 — a WebView2 host in the .NET tray that
+  runs the shared scrape JS and pipes the payload to the engine; Phase 3 — surface the
+  ingested snapshot through `/usage`. `ClaudeWeb` / Codex web / Copilot budget web are
+  not started.
 - **Interactive CLI / PTY login** — `Host/PTY/TTYCommandRunner` is stubbed by
   `TTYCommandRunnerWindowsStub`. Claude/Codex/Antigravity CLI sessions throw
   *"… PTY session is not supported on Windows yet."* ✅ *Partial Windows path*:
@@ -169,11 +196,15 @@ the menu items **Refresh**, **Settings…**, **Always on screen**,
 
 1. **Browser cookie import** on Windows — unlocks ~12+ providers (Broken +
    Degraded cookie cases).
-2. **Secure token storage** (DPAPI / Windows Credential Manager) replacing the
-   plaintext `TokenAccounts` file.
+2. ✅ **Secure token storage** — DPAPI now encrypts the `KeychainCacheStore`
+   cookie/OAuth cache, the `config.json` secret fields (`apiKey`/`secretKey`/
+   `cookieHeader`/`tokenAccounts[].token`), and the `FileTokenAccountStore` tokens at
+   rest on Windows. Remaining (optional): ACL-harden the token files (DPAPI already
+   protects contents at rest).
 3. **Interactive login** (PTY replacement) for Claude / Codex. (Antigravity now has
    a browser OAuth login via `codexbar login`; still needs tray UI wiring.)
-4. **WebKit dashboard scraping** replacement (e.g. WebView2) for OpenAI / Claude /
-   Codex web paths.
+4. **WebKit dashboard scraping** replacement (WebView2) for OpenAI / Claude / Codex
+   web paths. 🚧 In progress: OpenAI engine-side ingest landed (`codexbar
+   openai-dashboard ingest`); WebView2 tray host + `/usage` wiring remain.
 5. **Tray UI parity** — charts, multi-account, cost view. (Native notifications
    are now implemented.)
