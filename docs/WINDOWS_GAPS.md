@@ -79,7 +79,15 @@ headless engine loses them on Windows:
   default ACLs).
 - **WebKit dashboard scraping** — `OpenAIWeb/*` (OpenAI credits/usage dashboard),
   `ClaudeWeb`, the Codex web dashboard strategy, Copilot budget web fetch,
-  `WebKit/WebKitTeardown`. All macOS-only (no WebView2 replacement yet).
+  `WebKit/WebKitTeardown`. The macOS app drives these in a `WKWebView`. 🚧 *WebView2
+  port in progress (OpenAI dashboard first)*: the parser (`OpenAIDashboardParser`) is
+  already cross-platform, so **Phase 1 landed** — a platform-agnostic
+  `OpenAIDashboardScrapeIngest` + `codexbar openai-dashboard ingest` verb turn a
+  scrape payload into an `OpenAIDashboardSnapshot` on Windows, reusing the parser (no
+  C# reimplementation). Remaining: Phase 2 — a WebView2 host in the .NET tray that
+  runs the shared scrape JS and pipes the payload to the engine; Phase 3 — surface the
+  ingested snapshot through `/usage`. `ClaudeWeb` / Codex web / Copilot budget web are
+  not started.
 - **Interactive CLI / PTY login** — `Host/PTY/TTYCommandRunner` is stubbed by
   `TTYCommandRunnerWindowsStub`. Claude/Codex/Antigravity CLI sessions throw
   *"… PTY session is not supported on Windows yet."* ✅ *Partial Windows path*:
@@ -195,7 +203,8 @@ the menu items **Refresh**, **Settings…**, **Always on screen**,
    protects contents at rest).
 3. **Interactive login** (PTY replacement) for Claude / Codex. (Antigravity now has
    a browser OAuth login via `codexbar login`; still needs tray UI wiring.)
-4. **WebKit dashboard scraping** replacement (e.g. WebView2) for OpenAI / Claude /
-   Codex web paths.
+4. **WebKit dashboard scraping** replacement (WebView2) for OpenAI / Claude / Codex
+   web paths. 🚧 In progress: OpenAI engine-side ingest landed (`codexbar
+   openai-dashboard ingest`); WebView2 tray host + `/usage` wiring remain.
 5. **Tray UI parity** — charts, multi-account, cost view. (Native notifications
    are now implemented.)

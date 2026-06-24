@@ -62,6 +62,8 @@ enum CodexBarCLI {
                 self.runConfigSetCookie(invocation.parsedValues)
             case ["config", "clear-cookie"]:
                 self.runConfigClearCookie(invocation.parsedValues)
+            case ["openai-dashboard", "ingest"]:
+                self.runOpenAIDashboardIngest(invocation.parsedValues)
             case ["cache", "clear"]:
                 self.runCacheClear(invocation.parsedValues)
             case ["diagnose"]:
@@ -95,6 +97,7 @@ enum CodexBarCLI {
         let configSetCookieSignature = CommandSignature.describe(ConfigSetCookieOptions())
         let cacheSignature = CommandSignature.describe(CacheOptions())
         let diagnoseSignature = CommandSignature.describe(DiagnoseOptions())
+        let openAIDashboardIngestSignature = CommandSignature.describe(OpenAIDashboardIngestOptions())
 
         return [
             CommandDescriptor(
@@ -183,6 +186,19 @@ enum CodexBarCLI {
                 abstract: "Run provider diagnostic and emit safe JSON export",
                 discussion: nil,
                 signature: diagnoseSignature),
+            CommandDescriptor(
+                name: "openai-dashboard",
+                abstract: "OpenAI web dashboard utilities",
+                discussion: nil,
+                signature: CommandSignature(),
+                subcommands: [
+                    CommandDescriptor(
+                        name: "ingest",
+                        abstract: "Parse a scraped OpenAI dashboard payload into a usage snapshot",
+                        discussion: nil,
+                        signature: openAIDashboardIngestSignature),
+                ],
+                defaultSubcommandName: "ingest"),
         ]
     }
 
