@@ -66,13 +66,17 @@ headless engine loses them on Windows:
   `~/.codexbar/config.json` (`apiKey`, `secretKey`, `cookieHeader`, and
   `tokenAccounts[].token`) are now DPAPI-encrypted at rest on Windows
   (`CodexBarConfigSecretProtection.swift`, `dpapi:v1:` marker, encrypt-on-save /
-  decrypt-on-load in `CodexBarConfigStore`). The separate `FileTokenAccountStore`
-  (`token-accounts.json`) encrypts its accounts' `token` the same way. Plaintext/
-  hand-written files still load and are migrated to ciphertext on the next save. This
-  is actually *stronger* than macOS, where those fields remain plaintext. Remaining:
-  the `security`-CLI Claude OAuth bootstrap and `KeychainMigration` are macOS-only, and
-  the token files get no Windows ACL hardening yet (DPAPI is the at-rest protection;
-  files still sit under the user profile with default ACLs).
+  decrypt-on-load in `CodexBarConfigStore`). The other CodexBar-owned secret files are
+  encrypted the same way: `FileTokenAccountStore` (`token-accounts.json`) per-`token`,
+  and the Antigravity `oauth_creds.json` whole-body envelope. Plaintext/hand-written
+  files still load and are migrated to ciphertext on the next save. This is actually
+  *stronger* than macOS, where those fields remain plaintext. Intentionally left
+  plaintext: Codex's `~/.codex/auth.json` and Claude's `~/.claude/.credentials.json`
+  are shared-format files owned by those external CLIs, so re-encrypting them would
+  break interop. Remaining: the `security`-CLI Claude OAuth bootstrap and
+  `KeychainMigration` are macOS-only, and the token files get no Windows ACL hardening
+  yet (DPAPI is the at-rest protection; files still sit under the user profile with
+  default ACLs).
 - **WebKit dashboard scraping** — `OpenAIWeb/*` (OpenAI credits/usage dashboard),
   `ClaudeWeb`, the Codex web dashboard strategy, Copilot budget web fetch,
   `WebKit/WebKitTeardown`. All macOS-only (no WebView2 replacement yet).

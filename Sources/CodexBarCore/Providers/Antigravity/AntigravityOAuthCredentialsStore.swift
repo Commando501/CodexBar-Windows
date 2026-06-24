@@ -467,7 +467,8 @@ public struct AntigravityOAuthCredentialsStore: @unchecked Sendable {
 
     private func loadUnlocked() throws -> AntigravityOAuthCredentials? {
         guard self.fileManager.fileExists(atPath: self.fileURL.path) else { return nil }
-        let data = try Data(contentsOf: self.fileURL)
+        let raw = try Data(contentsOf: self.fileURL)
+        let data = Self.decodingStoredPayload(raw)
         return try JSONDecoder().decode(AntigravityOAuthCredentials.self, from: data)
     }
 
@@ -478,9 +479,36 @@ public struct AntigravityOAuthCredentialsStore: @unchecked Sendable {
             if !self.fileManager.fileExists(atPath: directory.path) {
                 try self.fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
             }
-            try data.write(to: self.fileURL, options: [.atomic])
+            try Self.encodingStoredPayload(data).write(to: self.fileURL, options: [.atomic])
             try self.applySecurePermissionsIfNeeded()
         }
+    }
+
+    /// On Windows, `oauth_creds.json` is a CodexBar-owned credentials file (not shared
+    /// with the Antigravity app), so its whole JSON body is DPAPI-encrypted at rest
+    /// behind the `dpapi:v1:` marker. On macOS/Linux it stays plaintext JSON.
+    private static func encodingStoredPayload(_ json: Data) -> Data {
+        #if os(Windows)
+        if let text = String(data: json, encoding: .utf8),
+           let envelope = WindowsConfigSecretCodec.protect(text)
+        {
+            return Data(envelope.utf8)
+        }
+        #endif
+        return json
+    }
+
+    /// Inverse of `encodingStoredPayload`. A plaintext (unmarked) file passes through,
+    /// so a pre-existing file keeps loading and is migrated to ciphertext on next save.
+    private static func decodingStoredPayload(_ stored: Data) -> Data {
+        #if os(Windows)
+        if let text = String(data: stored, encoding: .utf8),
+           let revealed = WindowsConfigSecretCodec.reveal(text)
+        {
+            return Data(revealed.utf8)
+        }
+        #endif
+        return stored
     }
 
     public func deleteIfPresent() throws {
