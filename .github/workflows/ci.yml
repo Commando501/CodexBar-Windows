@@ -212,3 +212,63 @@ jobs:
           fi
           "$BIN" usage --provider codex --web 2>&1 | tee /tmp/codexbarcli-stderr.txt >/dev/null || true
           grep -q "macOS" /tmp/codexbarcli-stderr.txt
+
+  build-windows-cli:
+    timeout-minutes: 60
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+
+      # Loads the MSVC x64 dev environment (cl/lib, plus LIB/INCLUDE/PATH) so we can
+      # build sqlite3.lib and so the Swift toolchain's linker can find the Windows SDK.
+      - name: Set up MSVC (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # Installs the Swift ${{ env.SWIFT_VERSION }} Windows toolchain and configures
+      # SDKROOT and the Swift/runtime paths for subsequent steps.
+      - name: Set up Swift ${{ env.SWIFT_VERSION }} (Windows)
+        uses: compnerd/gha-setup-swift@main
+        with:
+          branch: swift-${{ env.SWIFT_VERSION }}-release
+          tag: ${{ env.SWIFT_VERSION }}-RELEASE
+
+      - name: Swift toolchain version
+        run: swift --version
+
+      # SweetCookieKit and the Chromium cookie importers link `sqlite3`, a system lib on
+      # macOS/Linux but absent on Windows. Compile the committed amalgamation into a
+      # static lib (mirrors Scripts/win-build-sqlite.cmd). /MD matches the UCRT the Swift
+      # toolchain links against.
+      - name: Build static sqlite3.lib (MSVC)
+        shell: cmd
+        working-directory: ThirdParty/sqlite-win
+        run: |
+          cl /nologo /c /O2 /MD /DSQLITE_ENABLE_COLUMN_METADATA /DSQLITE_ENABLE_FTS5 sqlite3.c || exit /b 1
+          lib /nologo /OUT:sqlite3.lib sqlite3.obj || exit /b 1
+
+      # Make the static sqlite3.lib and bundled sqlite3.h discoverable, the same way
+      # Scripts/win-build.cmd does locally via LIB/INCLUDE.
+      - name: Configure sqlite linker/include paths
+        shell: pwsh
+        run: |
+          $sql = Join-Path $env:GITHUB_WORKSPACE 'ThirdParty\sqlite-win'
+          "LIB=$sql;$env:LIB" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "INCLUDE=$sql;$env:INCLUDE" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build CodexBarCLI
+        run: swift build --product CodexBarCLI
+
+      - name: Swift Test (Windows)
+        run: swift test
+
+      - name: Smoke test CodexBarCLI
+        shell: pwsh
+        run: |
+          $binDir = (swift build --product CodexBarCLI --show-bin-path).Trim()
+          $bin = Join-Path $binDir 'CodexBarCLI.exe'
+          & $bin --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "--help failed" }
+          & $bin --version | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "--version failed" }

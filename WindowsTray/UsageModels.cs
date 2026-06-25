@@ -27,8 +27,20 @@ public sealed class UsageData
     [JsonPropertyName("secondary")] public RateWindow? Secondary { get; set; }
     [JsonPropertyName("tertiary")] public RateWindow? Tertiary { get; set; }
     [JsonPropertyName("extraRateWindows")] public List<NamedRateWindow>? ExtraRateWindows { get; set; }
+    [JsonPropertyName("providerCost")] public ProviderCost? ProviderCost { get; set; }
     [JsonPropertyName("updatedAt")] public DateTimeOffset? UpdatedAt { get; set; }
     [JsonPropertyName("identity")] public Identity? Identity { get; set; }
+}
+
+/// <summary>Spend/budget snapshot (e.g. Cursor On-Demand usage beyond the included plan).</summary>
+public sealed class ProviderCost
+{
+    [JsonPropertyName("used")] public double Used { get; set; }
+    [JsonPropertyName("limit")] public double Limit { get; set; }
+    [JsonPropertyName("currencyCode")] public string? CurrencyCode { get; set; }
+    [JsonPropertyName("period")] public string? Period { get; set; }
+    [JsonPropertyName("resetsAt")] public DateTimeOffset? ResetsAt { get; set; }
+    [JsonPropertyName("personalUsed")] public double? PersonalUsed { get; set; }
 }
 
 public sealed class Identity
